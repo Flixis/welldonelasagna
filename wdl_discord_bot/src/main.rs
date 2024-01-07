@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use chrono::Utc;
 use dotenv::dotenv;
 use serenity::futures::StreamExt;
 use serenity::model::Timestamp;
@@ -26,17 +27,26 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, bot: Ready) {
         println!("{} is connected!", bot.user.name);
 
-        // Parse the DISCORD_CHANNEL_ID from the environment variable
-        let discord_channel_id = dotenv::var("DISCORD_CHANNEL_ID")
-            .expect("Missing DISCORD_CHANNEL_ID in environment variable");
-        let channel_id = ChannelId::from_str(discord_channel_id.as_str())
-            .expect("couldn't parse DISCORD_CHANNEL_ID in for ChannelId");
+        let discord_channel_id = match dotenv::var("DISCORD_CHANNEL_ID") {
+            Ok(val) => val,
+            Err(_) => {
+                println!("Missing DISCORD_CHANNEL_ID in environment variable");
+                return;
+            }
+        };
+
+        let channel_id = match ChannelId::from_str(&discord_channel_id) {
+            Ok(val) => val,
+            Err(_) => {
+                println!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
+                return;
+            }
+        };
 
         // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
         // let end_date: DateTime<Utc> = Utc::now(); // now
-        let start_date = Timestamp::parse("2023-01-01T00:00:00Z").unwrap();
-        let end_date = Timestamp::parse("2023-12-31T23:59:59Z").unwrap();
-
+        let start_date = Timestamp::parse("2029-01-01T00:00:00Z").unwrap();
+        let end_date = Timestamp::parse("2029-12-31T23:59:59Z").unwrap();
 
         let mut messages = channel_id.messages_iter(&ctx.http).boxed();
 
@@ -61,8 +71,8 @@ impl EventHandler for Handler {
 
                         // Insert message details into the database
                         let insert_query = "
-                            INSERT INTO wdl_database.discord_messages 
-                            (MessageId, ChannelId, UserId, Name, Content, Timestamp, PremiumType) 
+                            INSERT INTO wdl_database.discord_messages
+                            (MessageId, ChannelId, UserId, Name, Content, Timestamp, PremiumType)
                             VALUES (?, ?, ?, ?, ?, ?, ?);
                         ";
 
@@ -87,8 +97,62 @@ impl EventHandler for Handler {
         println!("Done downloading!");
     }
 
-    async fn message(&self, _ctx: Context, msg: Message) {
-        println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+    async fn message(&self, ctx: Context, msg: Message) {
+        let discord_channel_id = match dotenv::var("DISCORD_CHANNEL_ID") {
+            Ok(val) => val,
+            Err(_) => {
+                println!("Missing DISCORD_CHANNEL_ID in environment variable");
+                return;
+            }
+        };
+
+        let channel_id = match ChannelId::from_str(&discord_channel_id) {
+            Ok(val) => val,
+            Err(_) => {
+                println!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
+                return;
+            }
+        };
+
+
+        
+        let random_value = rand::random::<u16>(); // Replace x and y with your values
+        println!("rand:{}",&random_value);
+        // Conditional action based on the random value
+        if random_value > 64880{  // Assuming x and y are bool, change condition accordingly if they are not
+            let query = "
+            SELECT Id, UserId, Name, Content, Timestamp 
+            FROM wdl_database.discord_messages
+            WHERE CHAR_LENGTH(Content) >= 1
+            ORDER BY RAND()
+            LIMIT 1;            
+            ";
+    
+            // Execute the query
+            let result = sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+                .fetch_one(&self.db_pool).await;
+    
+            match result {
+                Ok(row) => {
+                    // Print the data
+                    println!(
+                        "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
+                        row.0, row.1, row.2, row.3, row.4
+                    );
+                    
+                    let message = format!("<@{}> said: {} @ {}", row.1, row.3, row.4); 
+
+                    if let Err(why) = channel_id.say(&ctx.http, message).await {
+                        eprintln!("Something went wrong: {why}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute query: {}", e);
+                }
+            }
+        } else {
+            println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+        }
     }
 }
 
