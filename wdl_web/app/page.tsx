@@ -7,7 +7,7 @@ export default function Home() {
     <>
       <Navbar />
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-around', padding: '5px' }}>
-        <div style={{ width: '50%', minWidth: '300px', padding: '5px' }}>
+        <div style={{ width: '90%', minWidth: '300px', padding: '5px' }}>
           <CountMessagesByUsers />
         </div>
       </div>

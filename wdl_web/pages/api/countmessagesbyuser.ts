@@ -5,14 +5,16 @@ import connection from './connection';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const query = `
     SELECT
-      Name,
-      UserId,
-      COUNT(MessageId) AS TotalMessages
-    FROM
-      discord_messages
-    GROUP BY
-      Name,
-      UserId
+    Name,
+    UserId,
+    COUNT(MessageId) AS TotalMessages
+FROM
+    wdl_database.discord_messages
+GROUP BY
+    Name,
+    UserId
+HAVING
+    COUNT(MessageId) >= 10;
   `;
 
   connection.query(query, (err, results) => {
