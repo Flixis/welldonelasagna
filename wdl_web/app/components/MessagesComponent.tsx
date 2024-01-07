@@ -5,6 +5,7 @@ interface Message {
   MessageId: number;
   ChannelId: number;
   UserId: number;
+  Name: string;
   Content: string;
   Timestamp: string;
   PremiumType: string;
@@ -20,7 +21,6 @@ const MessagesComponent = () => {
       .then(data => {
         setMessages(data);
         setLoading(false);
-        console.log(data); // Logging here after setting the messages
       })
       .catch(error => console.error('Error fetching data: ', error));
   }, []);
@@ -33,7 +33,7 @@ const MessagesComponent = () => {
     <div>
       {messages.map(message => (
         <div key={message.Id}>
-          <p>User ID: {message.UserId}</p>
+          <p>Name: {message.Name}</p>
           <p>Message: {message.Content}</p>
           <p>Timestamp: {message.Timestamp}</p>
           {/* Display other fields as needed */}

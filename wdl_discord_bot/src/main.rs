@@ -46,10 +46,11 @@ impl EventHandler for Handler {
                     if msg.timestamp > start_date && msg.timestamp < end_date.into() {
                         // Print the message details
                         println!(
-                            "{}@{}@{}@{}@{}@{:?}",
+                            "{}@{}@{}@{}@{}@{}@{:?}",
                             &msg.id,
                             &msg.channel_id,
                             &msg.author.id,
+                            &msg.author.name,
                             &msg.timestamp,
                             &msg.content,
                             &msg.author.premium_type
@@ -61,8 +62,8 @@ impl EventHandler for Handler {
                         // Insert message details into the database
                         let insert_query = "
                             INSERT INTO wdl_database.discord_messages 
-                            (MessageId, ChannelId, UserId, Content, Timestamp, PremiumType) 
-                            VALUES (?, ?, ?, ?, ?, ?);
+                            (MessageId, ChannelId, UserId, Name, Content, Timestamp, PremiumType) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?);
                         ";
 
                         // Execute the query
@@ -70,7 +71,8 @@ impl EventHandler for Handler {
                             .bind(i64::from(msg.id)) // Assuming msg.id is an ID type that can be converted to i64
                             .bind(i64::from(msg.channel_id))
                             .bind(i64::from(msg.author.id))
-                            .bind(&msg.content)
+                            .bind(msg.author.name)
+                            .bind(msg.content)
                             .bind(timestamp_str)
                             .bind(premium_type_str)
                             .execute(&self.db_pool)
