@@ -116,10 +116,9 @@ impl EventHandler for Handler {
 
 
         
-        let random_value = rand::random::<u16>(); // Replace x and y with your values
+        let random_value = rand::random::<u16>();
         println!("rand:{}",&random_value);
-        // Conditional action based on the random value
-        if random_value > 64880{  // Assuming x and y are bool, change condition accordingly if they are not
+        if random_value > 64880{  //%1 chance
             let query = "
             SELECT Id, UserId, Name, Content, Timestamp 
             FROM wdl_database.discord_messages
