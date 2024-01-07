@@ -34,8 +34,8 @@ impl EventHandler for Handler {
 
         // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
         // let end_date: DateTime<Utc> = Utc::now(); // now
-        let start_date = Timestamp::parse("2023-12-31T00:00:00Z").unwrap();
-        let end_date = Timestamp::parse("2024-01-01T23:59:59Z").unwrap();
+        let start_date = Timestamp::parse("2023-01-01T00:00:00Z").unwrap();
+        let end_date = Timestamp::parse("2023-12-31T23:59:59Z").unwrap();
 
 
         let mut messages = channel_id.messages_iter(&ctx.http).boxed();
@@ -76,11 +76,13 @@ impl EventHandler for Handler {
                             .execute(&self.db_pool)
                             .await
                             .map_err(|e| println!("Failed to insert message: {}", e));
+
                     }
                 }
                 Err(why) => println!("Error while fetching a message: {:?}", why),
             }
         }
+        println!("Done downloading!");
     }
 
     async fn message(&self, _ctx: Context, msg: Message) {
