@@ -144,7 +144,7 @@ impl EventHandler for Handler {
                     let timestamp_string = row.4.to_string();
                     // Now split the string and collect into Vec
                     let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                    let message = format!("> ** <@{}> on {} at {}:**\n\n_'{}'_", row.1, timestamp[0], timestamp[1], row.3); 
+                    let message = format!("> ** <@{}> on {} at {}:**\n> \n> _'{}'_", row.1, timestamp[0], timestamp[1], row.3); 
 
                     if let Err(why) = channel_id.say(&ctx.http, message).await {
                         eprintln!("Something went wrong: {why}");
