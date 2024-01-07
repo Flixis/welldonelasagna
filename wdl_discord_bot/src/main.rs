@@ -1,3 +1,4 @@
+
 use std::str::FromStr;
 
 use chrono::Utc;
@@ -118,7 +119,7 @@ impl EventHandler for Handler {
         
         let random_value = rand::random::<u16>();
         println!("rand:{}",&random_value);
-        if random_value > 64880{  //%1 chance
+        if random_value > 32880{  //%1 chance
             let query = "
             SELECT Id, UserId, Name, Content, Timestamp 
             FROM wdl_database.discord_messages
@@ -139,7 +140,11 @@ impl EventHandler for Handler {
                         row.0, row.1, row.2, row.3, row.4
                     );
                     
-                    let message = format!("<@{}> said: {} @ {}", row.1, row.3, row.4); 
+                    // Store the string in a variable
+                    let timestamp_string = row.4.to_string();
+                    // Now split the string and collect into Vec
+                    let timestamp: Vec<_> = timestamp_string.split(" ").collect();
+                    let message = format!("> ** <@{}> on {} at {}:**\n\n_'{}'_", row.1, timestamp[0], timestamp[1], row.3); 
 
                     if let Err(why) = channel_id.say(&ctx.http, message).await {
                         eprintln!("Something went wrong: {why}");
