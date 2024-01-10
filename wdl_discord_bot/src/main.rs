@@ -1,10 +1,7 @@
 
 use std::str::FromStr;
-
 use chrono::Utc;
 use dotenv::dotenv;
-use serenity::futures::StreamExt;
-use serenity::model::Timestamp;
 use serenity::{
     async_trait,
     model::{channel::Message, gateway::Ready, id::ChannelId},
@@ -25,7 +22,7 @@ impl Handler {
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, bot: Ready) {
+    async fn ready(&self, _ctx: Context, bot: Ready) {
         println!("{} is connected!", bot.user.name);
     }
 
@@ -50,7 +47,7 @@ impl EventHandler for Handler {
         
         let random_value = rand::random::<u16>();
         println!("rand:{}",&random_value);
-        if random_value > 32880{  //%1 chance
+        if random_value > 64880{  //%1 chance
             let query = "
             SELECT Id, UserId, Name, Content, Timestamp 
             FROM wdl_database.discord_messages

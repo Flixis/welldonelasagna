@@ -1,15 +1,18 @@
 use std::str::FromStr;
-
-use chrono::Utc;
 use dotenv::dotenv;
+use logging_settings::setup_loggers;
 use serenity::futures::StreamExt;
+use serenity::http::RatelimitInfo;
 use serenity::model::Timestamp;
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready, id::ChannelId},
+    model::{gateway::Ready, id::ChannelId},
     prelude::*,
 };
 use sqlx::mysql::MySqlPool;
+
+
+mod logging_settings;
 
 struct Handler {
     db_pool: MySqlPool,
@@ -24,13 +27,20 @@ impl Handler {
 
 #[async_trait]
 impl EventHandler for Handler {
+
+    async fn ratelimit(&self, data: RatelimitInfo) {
+
+        log::warn!("ratelimit limit: {} with duration: {:?}", data.limit, data.timeout);
+
+    }
+
     async fn ready(&self, ctx: Context, bot: Ready) {
-        println!("{} is connected!", bot.user.name);
+        log::info!("{} is connected!", bot.user.name);
 
         let discord_channel_id = match dotenv::var("DISCORD_CHANNEL_ID") {
             Ok(val) => val,
             Err(_) => {
-                println!("Missing DISCORD_CHANNEL_ID in environment variable");
+                log::info!("Missing DISCORD_CHANNEL_ID in environment variable");
                 return;
             }
         };
@@ -38,24 +48,25 @@ impl EventHandler for Handler {
         let channel_id = match ChannelId::from_str(&discord_channel_id) {
             Ok(val) => val,
             Err(_) => {
-                println!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
+                log::info!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
                 return;
             }
         };
 
         // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
         // let end_date: DateTime<Utc> = Utc::now(); // now
-        let start_date = Timestamp::parse("2029-01-01T00:00:00Z").unwrap();
-        let end_date = Timestamp::parse("2029-12-31T23:59:59Z").unwrap();
+        let start_date = Timestamp::parse("2017-01-01T00:00:00Z").unwrap();
+        let end_date = Timestamp::parse("2021-12-31T23:59:59Z").unwrap();
 
         let mut messages = channel_id.messages_iter(&ctx.http).boxed();
 
         while let Some(message) = messages.next().await {
+            log::info!("Receving message....");
             match message {
                 Ok(msg) => {
                     if msg.timestamp > start_date && msg.timestamp < end_date.into() {
                         // Print the message details
-                        println!(
+                        log::info!(
                             "{}@{}@{}@{}@{}@{}@{:?}",
                             &msg.id,
                             &msg.channel_id,
@@ -87,18 +98,20 @@ impl EventHandler for Handler {
                             .bind(premium_type_str)
                             .execute(&self.db_pool)
                             .await
-                            .map_err(|e| println!("Failed to insert message: {}", e));
+                            .map_err(|e| log::info!("Failed to insert message: {}", e));
                     }
                 }
-                Err(why) => println!("Error while fetching a message: {:?}", why),
+                Err(why) => log::info!("Error while fetching a message: {:?}", why),
             }
         }
-        println!("Done downloading!");
+        log::info!("Done downloading!");
     }
 }
 
 #[tokio::main]
 async fn main() {
+
+    setup_loggers("wdl_discord_scraper".to_string());
     dotenv().ok();
 
     // Establish connection to the database
@@ -124,6 +137,6 @@ async fn main() {
         .expect("Error creating client");
 
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        log::info!("Client error: {:?}", why);
     }
 }
