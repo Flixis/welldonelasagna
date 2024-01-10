@@ -26,18 +26,18 @@ const CountMessagesByUsers = () => {
     const chartData: ChartData = {
         labels: messages.map(message => message.Name),
         datasets: [{
-            label: 'Total Messages',
+            label: 'Total Messages by User >= 100',
             data: messages.map(message => message.TotalMessages),
             backgroundColor: 'rgba(54, 162, 235, 0.5)',
             borderColor: 'rgba(54, 162, 235, 1)',
             borderWidth: 1
         }]
     };
-
+    const dataMin = Math.min(...messages.map(message => message.TotalMessages));
     const chartOptions: ChartOptions = {
         scales: {
             y: {
-                beginAtZero: true
+                beginAtZero: true,
             }
         }
     };
