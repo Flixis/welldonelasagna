@@ -1,13 +1,13 @@
-
-use std::str::FromStr;
 use chrono::Utc;
 use dotenv::dotenv;
+use rand::Rng;
 use serenity::{
     async_trait,
     model::{channel::Message, gateway::Ready, id::ChannelId},
     prelude::*,
 };
 use sqlx::mysql::MySqlPool;
+use std::str::FromStr;
 
 struct Handler {
     db_pool: MySqlPool,
@@ -42,12 +42,10 @@ impl EventHandler for Handler {
                 return;
             }
         };
-
-
         
-        let random_value = rand::random::<u16>();
-        println!("rand:{}",&random_value);
-        if random_value > 64880{  //%1 chance
+        let rand = rand::thread_rng().gen_range(0..1000);
+        println!("rand generated {:?}", rand);
+        if  rand < 1 { //%0.1 chance happening
             let query = "
             SELECT Id, UserId, Name, Content, Timestamp 
             FROM wdl_database.discord_messages
@@ -55,11 +53,13 @@ impl EventHandler for Handler {
             ORDER BY RAND()
             LIMIT 1;            
             ";
-    
+
             // Execute the query
-            let result = sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-                .fetch_one(&self.db_pool).await;
-    
+            let result =
+                sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+                    .fetch_one(&self.db_pool)
+                    .await;
+
             match result {
                 Ok(row) => {
                     // Print the data
@@ -67,12 +67,15 @@ impl EventHandler for Handler {
                         "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
                         row.0, row.1, row.2, row.3, row.4
                     );
-                    
+
                     // Store the string in a variable
                     let timestamp_string = row.4.to_string();
                     // Now split the string and collect into Vec
                     let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                    let message = format!("> ** <@{}> on {} at {}:**\n> \n> _'{}'_", row.1, timestamp[0], timestamp[1], row.3); 
+                    let message = format!(
+                        "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
+                        row.1, timestamp[0], timestamp[1], row.3
+                    );
 
                     if let Err(why) = channel_id.say(&ctx.http, message).await {
                         eprintln!("Something went wrong: {why}");
