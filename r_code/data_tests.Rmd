@@ -86,10 +86,20 @@ FROM wdl_database.discord_messages;
 ```
 
 ```{sql connection=database}
-SELECT Name, COUNT(distinct Id) as MostMessages 
-FROM wdl_database.discord_messages
-GROUP BY Name
-ORDER BY MostMessages DESC
+SELECT
+    CASE 
+        WHEN Name = 'coeus._' OR Name = 'coeus7680' THEN 'coeus'
+        ELSE Name
+    END AS NameAlias,
+    COUNT(DISTINCT Id) as MostMessages
+FROM
+    wdl_database.discord_messages
+WHERE
+    Name IN ('theycallmeq', 'jbuwu', 'snozledozle', 'thefyreprophecy', 'joppertje', 'lykozen', 'coeus._', 'coeus7680')
+GROUP BY
+    NameAlias
+ORDER BY
+    MostMessages ASC
 LIMIT 1;
 ```
 ```{r}
@@ -100,7 +110,28 @@ GROUP BY Name
 ORDER BY MostMessages DESC
 LIMIT 1;
 ")
+
+result_leastmessages<- dbGetQuery(database, "
+SELECT
+    CASE 
+        WHEN Name = 'coeus._' OR Name = 'coeus7680' THEN 'coeus'
+        ELSE Name
+    END AS NameAlias,
+    COUNT(DISTINCT Id) as MostMessages
+FROM
+    wdl_database.discord_messages
+WHERE
+    Name IN ('theycallmeq', 'jbuwu', 'snozledozle', 'thefyreprophecy', 'joppertje', 'lykozen', 'coeus._', 'coeus7680')
+GROUP BY
+    NameAlias
+ORDER BY
+    MostMessages ASC
+LIMIT 1;
+")
 ```
+
+
+
 
 ```{sql connection=database}
 SELECT *
@@ -186,21 +217,26 @@ print(top_words)
 ```
 ```{r}
 # Assuming top_words is already created and contains the top 50 words
-plot_topwords <- ggplot(top_words, aes(x = reorder(word, n), y = n, fill = word)) +
+plot_topwords <- ggplot(top_words, aes(x = reorder(word, n), y = n)) +
   geom_bar(stat = "identity") +
   coord_flip() +  # Flips the coordinates to make the plot horizontal
-  scale_fill_viridis_d() +  # Use the viridis color palette for discrete data
   labs(title = "Top 50 Word Frequencies",
        x = "Words",
        y = "Frequency") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1),  # Adjust x-axis labels for readability
-        legend.position = "none")  # Hide the legend
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # Adjust x-axis labels for readability
 
-# Convert to an interactive plotly object
 ggplotly(plot_topwords)
-
 ```
 
 
+
+```{sql connection=database}
+SELECT UserId, Name, COUNT(*) as TimesSaid
+FROM wdl_database.discord_messages
+WHERE Content LIKE '%%'
+GROUP BY UserId, Name
+ORDER BY TimesSaid DESC;
+
+```
 

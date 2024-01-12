@@ -5,7 +5,7 @@ output:
     theme: 
       version: 4
       bootswatch: minty
-    orientation: rows
+    orientation: columns
     source_code: embed
 ---
 
@@ -84,35 +84,59 @@ HAVING
     COUNT(MessageId) >= 100;
 ")
 
+result_leastmessages<- dbGetQuery(database, "
+SELECT
+    CASE 
+        WHEN Name = 'coeus._' OR Name = 'coeus7680' THEN 'coeus'
+        ELSE Name
+    END AS NameAlias,
+    COUNT(DISTINCT Id) as MostMessages
+FROM
+    wdl_database.discord_messages
+WHERE
+    Name IN ('theycallmeq', 'jbuwu', 'snozledozle', 'thefyreprophecy', 'joppertje', 'lykozen', 'coeus._', 'coeus7680')
+GROUP BY
+    NameAlias
+ORDER BY
+    MostMessages ASC
+LIMIT 1;
+")
+
 word_frequencies <- dfData %>% 
   unnest_tokens(word, Content) %>%  # Split text into words
   count(word, sort = TRUE)          # Count and sort by frequency
 top_words <- head(word_frequencies, 50)
 ```
 
-Value Boxes {data-width=250}
+Value Boxes {data-width=100}
 -------------------------------------
 
-### Primary
+### Total Messages
 
 ```{r}
 valueBox(result_totalmessages$TotalMessages, caption = "Total Messages", icon = "fa-comments")
 ```
 
-### Info
+### Most Messages
 
 ```{r}
 valueBox(result_mostmessages$Name, caption = "Most Messages", color = "info", icon = "fa-comments")
 ```
 
-Column {data-width=350}
+### Least Messages
+```{r}
+valueBox(result_leastmessages$Name, caption = "Least Messages", color = "danger", icon = "fa-comments")
+```
+
+Column {data-width=500 .tabset}
 -----------------------------------------------------------------------
 
-### Chart A
+### Monthly Messages
 
 ```{r}
 plot_messagepermonth <- ggplot(result_messagespermonth, aes(x = Month, y = TotalMessages, fill = Name)) +
   geom_bar(stat = "identity") +
+  coord_flip() +  # Flips the coordinates for horizontal bars
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate x-axis labels if needed
   labs(title = "Monthly Messages per User", 
        x = "Month", 
@@ -121,8 +145,38 @@ plot_messagepermonth <- ggplot(result_messagespermonth, aes(x = Month, y = Total
 ggplotly(plot_messagepermonth)
 ```
 
+### Total messages
 
-### Chart B
+```{r}
+plot_totalmessagesperuser <- ggplot(result_totalmessagesperuser, aes(x = Name, y = TotalMessages, fill = Name)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Flips the coordinates for horizontal bars
+  theme_minimal() +
+  labs(title = "Total Messages per User",
+       x = "",
+       y = "Total Messages") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")  # Removes the legend
+
+# Convert to an interactive plotly object
+ggplotly(plot_totalmessagesperuser)
+```
+
+
+
+
+Column {data-height=500}
+-----------------------------------------------------------------------
+
+### Nitro Distrubution
+
+```{r}
+plot_ly(result_nitrodistrobutionperusers, labels = ~PremiumType, values = ~UniqueUserCount, type = 'pie',
+  textinfo = 'label+percent', insidetextorientation = 'radial') %>%
+  layout(title = 'Distribution of Premium Types Among Users')
+```
+
+### Top words
 
 ```{r}
 # Assuming top_words is already created and contains the top 50 words
@@ -139,32 +193,4 @@ plot_topwords <- ggplot(top_words, aes(x = reorder(word, n), y = n, fill = word)
 
 # Convert to an interactive plotly object
 ggplotly(plot_topwords)
-```
-
-
-
-Column {data-width=350}
------------------------------------------------------------------------
-
-### Chart D
-
-```{r}
-plot_ly(result_nitrodistrobutionperusers, labels = ~PremiumType, values = ~UniqueUserCount, type = 'pie',
-  textinfo = 'label+percent', insidetextorientation = 'radial') %>%
-  layout(title = 'Distribution of Premium Types Among Users')
-```
-
-### Chart E
-
-```{r}
-plot_totalmessagesperuser <- ggplot(result_totalmessagesperuser, aes(x = Name, y = TotalMessages, fill = Name)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(title = "Total Messages per User",
-       x = "User Name",
-       y = "Total Messages") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
-
-# Convert to an interactive plotly object
-ggplotly(plot_totalmessagesperuser)
 ```
