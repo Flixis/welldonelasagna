@@ -67,6 +67,7 @@ SELECT PremiumType,
        GROUP_CONCAT(DISTINCT Name ORDER BY Name SEPARATOR ', ') AS Users, 
        COUNT(DISTINCT Name) AS UniqueUserCount
 FROM wdl_database.discord_messages
+WHERE PremiumType <> 'none'
 GROUP BY PremiumType;
 ")
 
