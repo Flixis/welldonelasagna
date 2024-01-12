@@ -1,5 +1,5 @@
 ---
-title: "Themed dashboard"
+title: "WellDoneLasagna Dashboard"
 output:
   flexdashboard::flex_dashboard:
     theme: 
