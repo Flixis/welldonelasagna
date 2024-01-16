@@ -8,15 +8,20 @@ use serenity::{
 };
 use sqlx::mysql::MySqlPool;
 use std::str::FromStr;
+use tokio::sync::Mutex;
+use uuid::Uuid;
 
 struct Handler {
     db_pool: MySqlPool,
+    counter: Mutex<u8>,
 }
 
-// Initialize the Handler with a database connection pool
 impl Handler {
     fn new(db_pool: MySqlPool) -> Self {
-        Handler { db_pool }
+        Handler {
+            db_pool,
+            counter: Mutex::new(0),
+        }
     }
 }
 
@@ -34,7 +39,6 @@ impl EventHandler for Handler {
                 return;
             }
         };
-
         let channel_id = match ChannelId::from_str(&discord_channel_id) {
             Ok(val) => val,
             Err(_) => {
@@ -42,65 +46,78 @@ impl EventHandler for Handler {
                 return;
             }
         };
-        
-        let rand = rand::thread_rng().gen_range(0..1000);
-        println!("rand generated {:?}", rand);
-        if  rand < 1 { //%0.1 chance happening
-            let query = "
-            SELECT Id, UserId, Name, Content, Timestamp 
-            FROM wdl_database.discord_messages
-            WHERE CHAR_LENGTH(Content) >= 1
-            ORDER BY RAND()
-            LIMIT 1;            
-            ";
 
-            // Execute the query
-            let result =
-                sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-                    .fetch_one(&self.db_pool)
-                    .await;
+        println!("Connected to {:?}", channel_id);
 
-            match result {
-                Ok(row) => {
-                    // Print the data
-                    println!(
-                        "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
-                        row.0, row.1, row.2, row.3, row.4
-                    );
+        let mut counter = self.counter.lock().await;
+        *counter += 1; // Increment counter
+        println!("counter at: {:?}", *counter);
+        if *counter >= 30 {
+            *counter = 0; // Reset the counter
 
-                    // Store the string in a variable
-                    let timestamp_string = row.4.to_string();
-                    // Now split the string and collect into Vec
-                    let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                    let message = format!(
-                        "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
-                        row.1, timestamp[0], timestamp[1], row.3
-                    );
+            let rand = rand::thread_rng().gen_range(0..100);
+            println!("rand generated {:?}", rand);
 
-                    if let Err(why) = channel_id.say(&ctx.http, message).await {
-                        eprintln!("Something went wrong: {why}");
+            if rand < 1 {
+                let query = "
+                SELECT Id, UserId, Name, Content, Timestamp 
+                FROM wdl_database.discord_messages
+                WHERE CHAR_LENGTH(Content) >= 1
+                ORDER BY RAND()
+                LIMIT 1;            
+                ";
+
+                // Execute the query
+                let result =
+                    sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+                        .fetch_one(&self.db_pool)
+                        .await;
+
+                match result {
+                    Ok(row) => {
+                        // Print the data
+                        println!(
+                            "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
+                            row.0, row.1, row.2, row.3, row.4
+                        );
+
+                        // Store the string in a variable
+                        let timestamp_string = row.4.to_string();
+                        // Now split the string and collect into Vec
+                        let timestamp: Vec<_> = timestamp_string.split(" ").collect();
+                        let message = format!(
+                            "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
+                            row.1, timestamp[0], timestamp[1], row.3
+                        );
+
+                        if let Err(why) = channel_id.say(&ctx.http, message).await {
+                            eprintln!("Something went wrong: {why}");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to execute query: {}", e);
                     }
                 }
-                Err(e) => {
-                    eprintln!("Failed to execute query: {}", e);
-                }
             }
-        } else {
-            println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
         }
+        println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
     }
 }
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+    // Generate a random UUID
+    let random_uuid = Uuid::new_v4();
+    // Print the random UUID as a string
+    println!("Version check: {}", random_uuid);
 
     // Establish connection to the database
     let database_url =
         dotenv::var("DATABASE_URL").expect("Missing DATABASE_URL in environment variable");
     let db_pool = MySqlPool::connect(&database_url)
         .await
-        .expect("Failed to connect to database");
+        .expect("Failed to connect to the database");
 
     // Create an instance of Handler with the database pool
     let handler = Handler::new(db_pool);
