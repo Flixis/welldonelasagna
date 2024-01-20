@@ -1,26 +1,29 @@
-use chrono::Utc;
+use clap::Parser;
 use dotenv::dotenv;
-use rand::Rng;
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready, id::ChannelId},
+    model::{channel::Message, gateway::Ready},
     prelude::*,
 };
 use sqlx::mysql::MySqlPool;
-use std::str::FromStr;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+mod cli;
+mod quote;
+
 struct Handler {
     db_pool: MySqlPool,
-    counter: Mutex<u8>,
+    counter: Mutex<usize>,
+    roll_amount: Option<usize>,
 }
 
 impl Handler {
-    fn new(db_pool: MySqlPool) -> Self {
+    fn new(db_pool: MySqlPool, roll_amount: Option<usize>) -> Self {
         Handler {
             db_pool,
             counter: Mutex::new(0),
+            roll_amount,
         }
     }
 }
@@ -32,75 +35,21 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
-        let discord_channel_id = match dotenv::var("DISCORD_CHANNEL_ID") {
-            Ok(val) => val,
-            Err(_) => {
-                println!("Missing DISCORD_CHANNEL_ID in environment variable");
-                return;
-            }
-        };
-        let channel_id = match ChannelId::from_str(&discord_channel_id) {
-            Ok(val) => val,
-            Err(_) => {
-                println!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
-                return;
-            }
-        };
-
-        println!("Connected to {:?}", channel_id);
-
         let mut counter = self.counter.lock().await;
-        *counter += 1; // Increment counter
-        println!("counter at: {:?}", *counter);
-        if *counter >= 30 {
-            *counter = 0; // Reset the counter
 
-            let rand = rand::thread_rng().gen_range(0..100);
-            println!("rand generated {:?}", rand);
+        let effective_roll_amount = match self.roll_amount {
+            Some(amount) => amount,
+            None => 15, // Default value
+        };
 
-            if rand < 1 {
-                let query = "
-                SELECT Id, UserId, Name, Content, Timestamp 
-                FROM wdl_database.discord_messages
-                WHERE CHAR_LENGTH(Content) >= 1
-                ORDER BY RAND()
-                LIMIT 1;            
-                ";
-
-                // Execute the query
-                let result =
-                    sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-                        .fetch_one(&self.db_pool)
-                        .await;
-
-                match result {
-                    Ok(row) => {
-                        // Print the data
-                        println!(
-                            "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
-                            row.0, row.1, row.2, row.3, row.4
-                        );
-
-                        // Store the string in a variable
-                        let timestamp_string = row.4.to_string();
-                        // Now split the string and collect into Vec
-                        let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                        let message = format!(
-                            "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
-                            row.1, timestamp[0], timestamp[1], row.3
-                        );
-
-                        if let Err(why) = channel_id.say(&ctx.http, message).await {
-                            eprintln!("Something went wrong: {why}");
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to execute query: {}", e);
-                    }
-                }
-            }
-        }
-        println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+        quote::roll_quote(
+            ctx,
+            msg,
+            &mut *counter,
+            effective_roll_amount,
+            &self.db_pool,
+        )
+        .await;
     }
 }
 
@@ -109,8 +58,9 @@ async fn main() {
     dotenv().ok();
     // Generate a random UUID
     let random_uuid = Uuid::new_v4();
-    // Print the random UUID as a string
     println!("Version check: {}", random_uuid);
+
+    let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
     // Establish connection to the database
     let database_url =
@@ -119,8 +69,8 @@ async fn main() {
         .await
         .expect("Failed to connect to the database");
 
-    // Create an instance of Handler with the database pool
-    let handler = Handler::new(db_pool);
+    // Create an instance of handler and fill its contents
+    let handler = Handler::new(db_pool, cli_args.roll_amount);
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
