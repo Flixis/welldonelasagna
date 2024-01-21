@@ -1,36 +1,63 @@
 use clap::Parser;
-use dotenv::dotenv;
 use serenity::{
+    all::ChannelId,
     async_trait,
-    model::{channel::Message, gateway::Ready},
+    model::{channel::Message, gateway::Ready, Timestamp},
     prelude::*,
 };
 use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use commands::{quote, scraper};
+
 mod cli;
-mod quote;
+mod commands;
+mod setup;
 
 struct Handler {
     db_pool: MySqlPool,
+    channel_id: ChannelId,
     counter: Mutex<usize>,
     roll_amount: Option<usize>,
+    scraping: bool,
 }
 
 impl Handler {
-    fn new(db_pool: MySqlPool, roll_amount: Option<usize>) -> Self {
+    fn new(
+        db_pool: MySqlPool,
+        channel_id: ChannelId,
+        roll_amount: Option<usize>,
+        scraping: bool,
+    ) -> Self {
         Handler {
             db_pool,
+            channel_id,
             counter: Mutex::new(0),
             roll_amount,
+            scraping,
         }
     }
 }
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _ctx: Context, bot: Ready) {
+    async fn ready(&self, ctx: Context, bot: Ready) {
+        // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
+        // let end_date: DateTime<Utc> = Utc::now(); // now
+        let start_date = Timestamp::parse("2028-01-01T00:00:00Z").unwrap();
+        let end_date = Timestamp::parse("2028-12-31T23:59:59Z").unwrap();
+        if self.scraping {
+            scraper::scrape_messages(
+                ctx,
+                &bot,
+                self.channel_id,
+                &self.db_pool,
+                start_date,
+                end_date,
+            )
+            .await;
+        }
         println!("{} is connected!", bot.user.name);
     }
 
@@ -44,47 +71,48 @@ impl EventHandler for Handler {
 
         quote::roll_quote(
             ctx,
-            msg,
+            &msg,
+            self.channel_id,
             &mut *counter,
             effective_roll_amount,
             &self.db_pool,
         )
         .await;
+
+        println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
     }
 }
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
     // Generate a random UUID
     let random_uuid = Uuid::new_v4();
     println!("Version check: {}", random_uuid);
 
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
-    // Establish connection to the database
-    let database_url =
-        dotenv::var("DATABASE_URL").expect("Missing DATABASE_URL in environment variable");
-    let db_pool = MySqlPool::connect(&database_url)
-        .await
-        .expect("Failed to connect to the database");
+    match setup::setup().await {
+        Ok((db_pool, discord_token, channel_id)) => {
+            // Create an instance of handler and fill its contents
+            let handler =
+                Handler::new(db_pool, channel_id, cli_args.roll_amount, cli_args.scraping);
 
-    // Create an instance of handler and fill its contents
-    let handler = Handler::new(db_pool, cli_args.roll_amount);
+            let intents = GatewayIntents::GUILD_MESSAGES
+                | GatewayIntents::DIRECT_MESSAGES
+                | GatewayIntents::MESSAGE_CONTENT;
 
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
+            let mut client = Client::builder(&discord_token, intents)
+                .event_handler(handler) // Pass the handler instance here
+                .await
+                .expect("Error creating client");
 
-    let discord_token =
-        dotenv::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN in environment variable");
-
-    let mut client = Client::builder(&discord_token, intents)
-        .event_handler(handler) // Pass the handler instance here
-        .await
-        .expect("Error creating client");
-
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+            if let Err(error) = client.start().await {
+                println!("Client error: {:?}", error);
+            }
+        }
+        Err(error) => {
+            // Error handling logic
+            eprintln!("Failed to set up: {}", error);
+        }
     }
 }

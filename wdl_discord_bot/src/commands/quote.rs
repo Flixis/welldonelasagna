@@ -2,30 +2,15 @@ use chrono::Utc;
 use rand::Rng;
 use serenity::all::ChannelId;
 use sqlx::MySqlPool;
-use std::str::FromStr;
 
 pub async fn roll_quote(
     ctx: serenity::client::Context,
-    msg: serenity::model::channel::Message,
+    _msg: &serenity::model::channel::Message,
+    channel_id: ChannelId,
     counter: &mut usize,
     roll_amount: usize,
     db_pool: &MySqlPool,
 ) {
-    let discord_channel_id = match dotenv::var("DISCORD_CHANNEL_ID") {
-        Ok(val) => val,
-        Err(_) => {
-            println!("Missing DISCORD_CHANNEL_ID in environment variable");
-            return;
-        }
-    };
-    let channel_id = match ChannelId::from_str(&discord_channel_id) {
-        Ok(val) => val,
-        Err(_) => {
-            println!("Couldn't parse DISCORD_CHANNEL_ID for ChannelId");
-            return;
-        }
-    };
-
     println!("Connected to {:?}", channel_id);
 
     *counter += 1; // Increment counter
@@ -78,5 +63,4 @@ pub async fn roll_quote(
             }
         }
     }
-    println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
 }

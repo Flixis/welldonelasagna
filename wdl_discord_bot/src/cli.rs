@@ -5,7 +5,7 @@ use clap::Parser;
 pub struct CliCommands {
     #[clap(short, long)]
     ///Wether or not the bot is gonna scrape data.
-    pub scraping: Option<bool>,
+    pub scraping: bool,
 
     #[clap(short, long)]
     ///The amount of messages required before the bot tries to roll and qoute someone.
