@@ -15,6 +15,8 @@ mod cli;
 mod commands;
 mod setup;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION"); //<-- read from cargo.toml
+
 struct Handler {
     db_pool: MySqlPool,
     channel_id: ChannelId,
@@ -87,7 +89,8 @@ impl EventHandler for Handler {
 async fn main() {
     // Generate a random UUID
     let random_uuid = Uuid::new_v4();
-    println!("Version check: {}", random_uuid);
+    println!("Bot version: {}", VERSION);
+    println!("Instance check: {}", random_uuid);
 
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
