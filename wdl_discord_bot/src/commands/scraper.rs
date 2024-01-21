@@ -1,6 +1,7 @@
 use serenity::all::ChannelId;
 use serenity::{futures::StreamExt, model::Timestamp};
 use sqlx::MySqlPool;
+use tracing::info;
 
 pub async fn scrape_messages(
     ctx: serenity::client::Context,
@@ -10,17 +11,17 @@ pub async fn scrape_messages(
     start_date: Timestamp,
     end_date: Timestamp,
 ) {
-    println!("Starting scrape");
+    info!("Starting scrape");
 
     let mut messages = channel_id.messages_iter(&ctx.http).boxed();
 
     while let Some(message) = messages.next().await {
-        println!("Receving message....");
+        info!("Receving message....");
         match message {
             Ok(msg) => {
                 if msg.timestamp > start_date && msg.timestamp < end_date.into() {
                     // Print the message details
-                    println!(
+                    info!(
                         "{}@{}@{}@{}@{}@{}@{:?}",
                         &msg.id,
                         &msg.channel_id,
@@ -52,11 +53,11 @@ pub async fn scrape_messages(
                         .bind(premium_type_str)
                         .execute(db_pool)
                         .await
-                        .map_err(|e| println!("Failed to insert message: {}", e));
+                        .map_err(|e| info!("Failed to insert message: {}", e));
                 }
             }
-            Err(why) => println!("Error while fetching a message: {:?}", why),
+            Err(why) => info!("Error while fetching a message: {:?}", why),
         }
     }
-    println!("Done downloading!");
+    info!("Done downloading!");
 }

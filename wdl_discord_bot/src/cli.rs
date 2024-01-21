@@ -19,5 +19,4 @@ pub struct CliCommands {
     #[clap(long, requires("scraping"))]
     ///Ending scrape at date. Date format like <2028-01-01T00:00:00Z>.
     pub end_date: Option<Timestamp>,
-
 }
