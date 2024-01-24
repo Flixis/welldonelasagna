@@ -1,4 +1,5 @@
 use chrono::Utc;
+use log::{info, warn};
 use rand::Rng;
 use serenity::all::ChannelId;
 use sqlx::MySqlPool;
@@ -11,15 +12,15 @@ pub async fn roll_quote(
     roll_amount: usize,
     db_pool: &MySqlPool,
 ) {
-    println!("Connected to {:?}", channel_id);
+    info!("Connected to {:?}", channel_id);
 
     *counter += 1; // Increment counter
-    println!("counter at: {:?}", counter);
+    info!("counter at: {:?}", counter);
     if *counter >= roll_amount {
         *counter = 0; // Reset the counter
 
         let rand = rand::thread_rng().gen_range(0..100);
-        println!("rand generated {:?}", rand);
+        info!("rand generated {:?}", rand);
 
         if rand < 1 {
             let query = "
@@ -39,7 +40,7 @@ pub async fn roll_quote(
             match result {
                 Ok(row) => {
                     // Print the data
-                    println!(
+                    info!(
                         "Id: {}, UserId: {}, Name: {}, Content: {}, Timestamp: {}",
                         row.0, row.1, row.2, row.3, row.4
                     );
@@ -54,11 +55,11 @@ pub async fn roll_quote(
                     );
 
                     if let Err(why) = channel_id.say(&ctx.http, message).await {
-                        eprintln!("Something went wrong: {why}");
+                        warn!("Something went wrong: {why}");
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to execute query: {}", e);
+                    warn!("Failed to execute query: {}", e);
                 }
             }
         }

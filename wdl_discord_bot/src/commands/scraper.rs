@@ -1,7 +1,7 @@
+use log::info;
 use serenity::all::ChannelId;
 use serenity::{futures::StreamExt, model::Timestamp};
 use sqlx::MySqlPool;
-use tracing::info;
 
 pub async fn scrape_messages(
     ctx: serenity::client::Context,

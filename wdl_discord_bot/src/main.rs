@@ -1,4 +1,5 @@
 use clap::Parser;
+use log::{info, warn};
 use serenity::{
     all::ChannelId,
     async_trait,
@@ -7,7 +8,6 @@ use serenity::{
 };
 use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
-use tracing::{info, Level};
 use uuid::Uuid;
 
 use commands::{quote, scraper};
@@ -18,7 +18,6 @@ mod logging_settings;
 mod setup;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION"); //<-- read from cargo.toml
-const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME"); //<-- read from cargo.toml
 
 struct Handler {
     db_pool: MySqlPool,
@@ -54,24 +53,24 @@ impl Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, bot: Ready) {
-        // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
-        // let end_date: DateTime<Utc> = Utc::now(); // now
-        // let start_date = Timestamp::parse("2028-01-01T00:00:00Z").unwrap();
-        // let end_date = Timestamp::parse("2028-12-31T23:59:59Z").unwrap();
-
-        let start_date = match self.start_date {
-            Some(start_date) => start_date,
-            None => panic!("Start date not set"),
-        };
-
-        let end_date = match self.end_date {
-            Some(end_date) => end_date,
-            None => panic!("Start date not set"),
-        };
-
-        println!("Using dates: {start_date} and {end_date}");
-
         if self.scraping {
+            // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
+            // let end_date: DateTime<Utc> = Utc::now(); // now
+            // let start_date = Timestamp::parse("2028-01-01T00:00:00Z").unwrap();
+            // let end_date = Timestamp::parse("2028-12-31T23:59:59Z").unwrap();
+
+            let start_date = match self.start_date {
+                Some(start_date) => start_date,
+                None => panic!("Start date not set"),
+            };
+
+            let end_date = match self.end_date {
+                Some(end_date) => end_date,
+                None => panic!("Start date not set"),
+            };
+
+            info!("Using dates: {start_date} and {end_date}");
+
             scraper::scrape_messages(
                 ctx,
                 &bot,
@@ -82,7 +81,7 @@ impl EventHandler for Handler {
             )
             .await;
         }
-        println!("{} is connected!", bot.user.name);
+        info!("{} is connected!", bot.user.name);
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -103,22 +102,20 @@ impl EventHandler for Handler {
         )
         .await;
 
-        println!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+        info!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
     }
 }
 
 #[tokio::main]
 async fn main() {
+    logging_settings::setup_loggers();
+    let cli_args: cli::CliCommands = cli::CliCommands::parse();
+
     // Generate a random UUID
     let random_uuid = Uuid::new_v4();
-    println!("Bot version: {}", VERSION);
-    println!("Instance check: {}", random_uuid);
+    info!("Bot version: {}", VERSION);
+    info!("Instance check: {}", random_uuid);
 
-    let cli_args: cli::CliCommands = cli::CliCommands::parse();
-    let log_dir: String = format!("./logs_{}", PACKAGE_NAME);
-    logging_settings::setup_logging(&log_dir, PACKAGE_NAME, Level::INFO);
-    info!("Hello world");
-    
     match setup::setup().await {
         Ok((db_pool, discord_token, channel_id)) => {
             // Create an instance of handler and fill its contents
@@ -141,12 +138,11 @@ async fn main() {
                 .expect("Error creating client");
 
             if let Err(error) = client.start().await {
-                println!("Client error: {:?}", error);
+                info!("Client error: {:?}", error);
             }
         }
         Err(error) => {
-            // Error handling logic
-            eprintln!("Failed to set up: {}", error);
+            warn!("Failed to set up: {}", error);
         }
     }
 }

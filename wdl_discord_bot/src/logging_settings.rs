@@ -1,24 +1,51 @@
-use chrono::Local;
-use tracing::Level;
-use tracing_appender::{non_blocking, rolling};
-use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
-use whoami::{hostname, username};
+use chrono::prelude::*;
+use simplelog::*;
+use std::fs::{self, OpenOptions};
+use std::path::Path;
+use whoami;
 
-pub fn setup_logging(log_folder: &str, app_name: &str, log_level: Level) {
-    // Determine the log file name based on current date, time, PC name, PC user, and app name
-    let pc_name = hostname();
-    let pc_user = username();
-    let date_time = Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let log_file_name = format!("{}_{}_{}_{}.log", date_time, pc_name, pc_user, app_name);
+const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME"); //<-- read from cargo.toml
 
-    // Set up file appender for logs
-    let file_appender = rolling::daily(log_folder, log_file_name);
-    let (non_blocking, _guard) = non_blocking(file_appender);
+/// App logging is setup with the following configuration:
+///
+/// Terminal logger -> Filter:Info, Config:Default, TerminalMode: Mixed, ColorChoice: Auto
+///
+/// Write Logger -> Filter:Info, Config:Defaulcart, File: Create(filename)
+///
+/// filename -> find_testlog_logs/{day-month-year_hour_minute}_{username}_{hostname}_{find_testlog}.log
+pub fn setup_loggers() {
+    let directory_name = format!("{}_logs", PACKAGE_NAME);
+    fs::create_dir_all(&directory_name).expect("unable to create logging directory");
+    let utc = Utc::now().format("%d-%m-%Y_%H_%M");
+    let filename_string_creation = format!(
+        "{}/{}_{}_{}_{}",
+        directory_name,
+        utc,
+        whoami::username(),
+        whoami::hostname(),
+        ".log"
+    );
+    let filename = Path::new(&filename_string_creation);
 
-    // Set the subscriber with the desired log level and layers for console and file
-    tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env().add_directive(log_level.into()))
-        .with(fmt::layer().pretty()) // For terminal output
-        .with(fmt::layer().with_writer(non_blocking).pretty()) // For file output
-        .init();
+    let file = OpenOptions::new()
+        .create(true) // This will create the file if it does not exist
+        .write(true) // Open the file in write mode
+        .append(true) // Set the file to append mode
+        .open(filename)
+        .expect("failed to open or create log file");
+
+    let config = ConfigBuilder::new()
+        .add_filter_allow_str(PACKAGE_NAME)
+        .build();
+
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            config.clone(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        WriteLogger::new(LevelFilter::Info, config, file),
+    ])
+    .expect("Couldn't initialize loggers");
 }
