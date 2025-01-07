@@ -16,7 +16,7 @@ pub async fn scrape_messages(
     let mut messages = channel_id.messages_iter(&ctx.http).boxed();
 
     while let Some(message) = messages.next().await {
-        info!("Receving message....");
+        info!("Receiving message....");
         match message {
             Ok(msg) => {
                 if msg.timestamp > start_date && msg.timestamp < end_date.into() {
