@@ -1,7 +1,7 @@
 use clap::Parser;
 use log::{info, warn};
 use serenity::{
-    all::ChannelId,
+    all::{ChannelId, Command, CreateCommand},
     async_trait,
     model::{channel::Message, gateway::Ready, Timestamp},
     prelude::*,
@@ -53,6 +53,12 @@ impl Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, bot: Ready) {
+        // Register the guess quote command
+        Command::create_global_command(&ctx.http, CreateCommand::new("guessquote")
+            .description("Start a game where you have to guess who said a quote"))
+            .await
+            .expect("Failed to create command");
+
         if self.scraping {
             // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
             // let end_date: DateTime<Utc> = Utc::now(); // now
@@ -82,6 +88,17 @@ impl EventHandler for Handler {
             .await;
         }
         info!("{} is connected!", bot.user.name);
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: serenity::model::application::Interaction) {
+        if let serenity::model::application::Interaction::Command(command) = interaction {
+            match command.data.name.as_str() {
+                "guessquote" => {
+                    quote::guess_quote(ctx, &command, &self.db_pool).await;
+                }
+                _ => {}
+            }
+        }
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -130,7 +147,8 @@ async fn main() {
 
             let intents = GatewayIntents::GUILD_MESSAGES
                 | GatewayIntents::DIRECT_MESSAGES
-                | GatewayIntents::MESSAGE_CONTENT;
+                | GatewayIntents::MESSAGE_CONTENT
+                | GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
             let mut client = Client::builder(&discord_token, intents)
                 .event_handler(handler) // Pass the handler instance here
