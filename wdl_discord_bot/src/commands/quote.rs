@@ -148,8 +148,9 @@ pub async fn guess_quote(
 
             let mut response = String::new();
             
-            // First, show who said the quote
-            response.push_str(&format!("Time's up! The quote was from <@{}>!\n\n", row.1));
+            // First, show who said the quote with message link
+            response.push_str(&format!("Time's up! The quote was from <@{}> ([link](https://discord.com/channels/1043341819438645298/{}/{}))\n\n", 
+                row.1, command.channel_id, row.0));
 
             // Handle no guesses case early
             if guesses.is_empty() {

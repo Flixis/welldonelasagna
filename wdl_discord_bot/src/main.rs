@@ -9,7 +9,7 @@ use serenity::{
 use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
 
-use commands::{quote, scraper};
+use commands::{quote, scraper, version};
 
 mod cli;
 mod commands;
@@ -58,6 +58,7 @@ impl EventHandler for Handler {
             CreateCommand::new("guessquote")
                 .description("Start a game where you have to guess who said a quote"),
             quote::register(),
+            version::register(),
         ];
 
         Command::set_global_commands(&ctx.http, commands)
@@ -103,6 +104,9 @@ impl EventHandler for Handler {
                 }
                 "scoreboard" => {
                     quote::show_scoreboard(ctx, &command, &self.db_pool).await;
+                }
+                "version" => {
+                    version::show_version(ctx, &command).await;
                 }
                 _ => {}
             }
