@@ -1,6 +1,8 @@
-DROP TABLE IF EXISTS wdl_database.discord_messages;
+USE wdl_database;
 
-CREATE TABLE wdl_database.discord_messages (
+DROP TABLE IF EXISTS discord_messages;
+
+CREATE TABLE discord_messages (
     Id BIGINT AUTO_INCREMENT PRIMARY KEY,
     MessageId BIGINT,
     ChannelId BIGINT,
@@ -10,4 +12,3 @@ CREATE TABLE wdl_database.discord_messages (
     Timestamp TIMESTAMP,
     PremiumType VARCHAR(50)
 );
-

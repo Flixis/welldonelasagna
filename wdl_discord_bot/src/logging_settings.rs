@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use simplelog::*;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
-use whoami;
+use whoami::{self, fallible};
 
 const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME"); //<-- read from cargo.toml
 
@@ -22,7 +22,7 @@ pub fn setup_loggers() {
         directory_name,
         utc,
         whoami::username(),
-        whoami::hostname(),
+        fallible::hostname().unwrap_or_default(),
         ".log"
     );
     let filename = Path::new(&filename_string_creation);

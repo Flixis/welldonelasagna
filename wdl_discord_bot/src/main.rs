@@ -8,7 +8,6 @@ use serenity::{
 };
 use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 use commands::{quote, scraper};
 
@@ -17,7 +16,8 @@ mod commands;
 mod logging_settings;
 mod setup;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION"); //<-- read from cargo.toml
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_ID: &str = env!("BUILD_ID");
 
 struct Handler {
     db_pool: MySqlPool,
@@ -53,11 +53,16 @@ impl Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, bot: Ready) {
-        // Register the guess quote command
-        Command::create_global_command(&ctx.http, CreateCommand::new("guessquote")
-            .description("Start a game where you have to guess who said a quote"))
+        // Register commands
+        let commands = vec![
+            CreateCommand::new("guessquote")
+                .description("Start a game where you have to guess who said a quote"),
+            quote::register(),
+        ];
+
+        Command::set_global_commands(&ctx.http, commands)
             .await
-            .expect("Failed to create command");
+            .expect("Failed to create commands");
 
         if self.scraping {
             // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
@@ -96,6 +101,9 @@ impl EventHandler for Handler {
                 "guessquote" => {
                     quote::guess_quote(ctx, &command, &self.db_pool).await;
                 }
+                "scoreboard" => {
+                    quote::show_scoreboard(ctx, &command, &self.db_pool).await;
+                }
                 _ => {}
             }
         }
@@ -129,9 +137,7 @@ async fn main() {
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
     // Generate a random UUID
-    let random_uuid = Uuid::new_v4();
-    info!("Bot version: {}", VERSION);
-    info!("Instance check: {}", random_uuid);
+    info!("Bot version: {} (build: {})", VERSION, BUILD_ID);
 
     match setup::setup().await {
         Ok((db_pool, discord_token, channel_id)) => {
