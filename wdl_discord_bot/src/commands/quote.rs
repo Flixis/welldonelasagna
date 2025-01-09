@@ -7,6 +7,7 @@ use serenity::all::{
 };
 use sqlx::MySqlPool;
 use std::time::Duration;
+use std::collections::HashSet;
 
 pub fn register() -> CreateCommand {
     CreateCommand::new("scoreboard")
@@ -22,7 +23,7 @@ pub async fn show_scoreboard(
     SELECT user_id, correct_guesses, total_attempts,
            CAST((correct_guesses * 100.0 / total_attempts) AS DOUBLE) as accuracy
     FROM wdl_database.quote_scores
-    ORDER BY correct_guesses DESC
+    ORDER BY accuracy DESC, correct_guesses DESC
     LIMIT 10;
     ";
 
@@ -122,41 +123,48 @@ pub async fn guess_quote(
 
             // Collect all guesses for 30 seconds
             let mut guesses = Vec::new();
-            let mut correct_guess = false;
+            let mut guessed_users = HashSet::new();
             
             let start_time = std::time::Instant::now();
-            while start_time.elapsed() < Duration::from_secs(30) && !correct_guess {
+            while start_time.elapsed() < Duration::from_secs(30) {
                 if let Some(guess) = channel_id
                     .await_reply(&ctx.shard)
                     .timeout(Duration::from_secs(1))
                     .await 
                 {
+                    // Skip if user has already guessed
+                    if guessed_users.contains(&guess.author.id) {
+                        continue;
+                    }
+                    
                     let correct_user_id = row.1.to_string();
                     let is_correct = guess.mentions.iter().any(|user| user.id.to_string() == correct_user_id);
                     
-                    // Store the guess result
+                    // Store the guess result and mark user as having guessed
                     guesses.push((guess.author.id, is_correct));
-                    
-                    // If someone guessed correctly, we'll finish after this iteration
-                    if is_correct {
-                        correct_guess = true;
-                    }
+                    guessed_users.insert(guess.author.id);
                 }
             }
 
-            // Process all guesses and update scores
             let mut response = String::new();
-            let guesses_clone = guesses.clone();
             
             // First, show who said the quote
-            response.push_str(&format!("The quote was from <@{}>!\n\n", row.1));
+            response.push_str(&format!("Time's up! The quote was from <@{}>!\n\n", row.1));
+
+            // Handle no guesses case early
+            if guesses.is_empty() {
+                if let Err(why) = channel_id.say(&ctx.http, response).await {
+                    warn!("Error sending response: {why}");
+                }
+                return;
+            }
             
-            // Separate correct and incorrect guesses
+            // Collect results before updating scores
             let mut correct_guesses = Vec::new();
             let mut incorrect_guesses = Vec::new();
             
-            // Update scores and collect results
-            for (user_id, is_correct) in guesses_clone {
+            // Process all guesses and update scores
+            for &(user_id, is_correct) in guesses.iter() {
                 // Update scores in database
                 let update_query = if is_correct {
                     "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts)
@@ -229,11 +237,6 @@ pub async fn guess_quote(
                 for guess in incorrect_guesses {
                     response.push_str(&format!("❌ {}\n", guess));
                 }
-            }
-
-            // Handle no guesses case
-            if guesses.is_empty() {
-                response = format!("Time's up! No one guessed. The quote was from <@{}>.", row.1);
             }
 
             if let Err(why) = channel_id.say(&ctx.http, response).await {
