@@ -1,5 +1,7 @@
 use clap::Parser;
 use log::{info, warn};
+use std::{fs, path::Path, sync::OnceLock};
+use toml::Value;
 use serenity::{
     all::{ChannelId, Command, CreateCommand},
     async_trait,
@@ -18,6 +20,64 @@ mod setup;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_ID: &str = env!("BUILD_ID");
+
+static ALLOWED_QUOTE_USERS: OnceLock<Vec<i64>> = OnceLock::new();
+
+fn ensure_config_exists() {
+    let config_dir = Path::new("config");
+    let config_file = config_dir.join("quote_settings.toml");
+
+    // Create config directory if it doesn't exist
+    if !config_dir.exists() {
+        fs::create_dir_all(config_dir).expect("Failed to create config directory");
+    }
+
+    // Create config file with default values if it doesn't exist
+    if !config_file.exists() {
+        let default_config = r#"# List of Discord user IDs that can be used for quotes
+# Format: Array of integers representing Discord user IDs
+allowed_user_ids = [
+    121751619149758464,
+    98443943032684544,
+    164878773349646336,
+    248870522975289344,
+    181824467851280395,
+    168785146206617601,
+    282681436132212736,
+    95565218498748416,
+    1092454499236462783,
+    243785081167151104,
+]"#;
+        fs::write(config_file, default_config).expect("Failed to create default config file");
+    }
+}
+
+fn load_allowed_user_ids() -> Vec<i64> {
+    match fs::read_to_string("config/quote_settings.toml") {
+        Ok(content) => {
+            match content.parse::<Value>() {
+                Ok(value) => {
+                    if let Some(array) = value.get("allowed_user_ids").and_then(|v| v.as_array()) {
+                        array.iter()
+                            .filter_map(|v| v.as_integer().map(|i| i as i64))
+                            .collect()
+                    } else {
+                        warn!("No allowed_user_ids found in config, using empty list");
+                        Vec::new()
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to parse config file: {}", e);
+                    Vec::new()
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Failed to read config file: {}", e);
+            Vec::new()
+        }
+    }
+}
 
 struct Handler {
     db_pool: MySqlPool,
@@ -138,6 +198,11 @@ impl EventHandler for Handler {
 #[tokio::main]
 async fn main() {
     logging_settings::setup_loggers();
+    
+    // Ensure config exists and load allowed users
+    ensure_config_exists();
+    let allowed_users = load_allowed_user_ids();
+    ALLOWED_QUOTE_USERS.set(allowed_users).expect("Failed to set allowed users");
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
     // Generate a random UUID

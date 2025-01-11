@@ -8,6 +8,7 @@ use serenity::all::{
 use sqlx::MySqlPool;
 use std::time::Duration;
 use std::collections::HashSet;
+use crate::ALLOWED_QUOTE_USERS;
 
 pub fn register() -> CreateCommand {
     CreateCommand::new("scoreboard")
@@ -84,16 +85,37 @@ pub async fn guess_quote(
     command: &CommandInteraction,
     db_pool: &MySqlPool,
 ) {
-    let query = "
-    SELECT Id, UserId, Name, Content, Timestamp 
-    FROM wdl_database.discord_messages
-    WHERE CHAR_LENGTH(Content) >= 20
-    ORDER BY RAND()
-    LIMIT 1;            
-    ";
+    // Get allowed user IDs from static
+    let empty_vec = Vec::new();
+    let allowed_users = ALLOWED_QUOTE_USERS.get().unwrap_or(&empty_vec);
+    
+    let query = if allowed_users.is_empty() {
+        // If no users specified, use original query
+        "SELECT Id, UserId, Name, Content, Timestamp 
+         FROM wdl_database.discord_messages
+         WHERE CHAR_LENGTH(Content) >= 20
+         ORDER BY RAND()
+         LIMIT 1"
+    } else {
+        // If users specified, only select from those users
+        "SELECT Id, UserId, Name, Content, Timestamp 
+         FROM wdl_database.discord_messages
+         WHERE CHAR_LENGTH(Content) >= 20
+         AND UserId IN (SELECT value FROM (SELECT UNNEST(CAST(? AS CHAR) REGEXP '[0-9]+' AS value)) as ids)
+         ORDER BY RAND()
+         LIMIT 1"
+    };
 
-    // Execute the query
-    let result = sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+    // Execute the query with or without user filter
+    let result = if allowed_users.is_empty() {
+        sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+    } else {
+        sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+            .bind(allowed_users.iter()
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+                .join(","))
+    }
         .fetch_one(db_pool)
         .await;
 
@@ -294,17 +316,37 @@ pub async fn roll_quote(
         info!("rand generated {:?}", rand);
 
         if rand < 1 {
-            let query = "
-            SELECT Id, UserId, Name, Content, Timestamp 
-            FROM wdl_database.discord_messages
-            WHERE CHAR_LENGTH(Content) >= 1
-            ORDER BY RAND()
-            LIMIT 1;            
-            ";
+            // Get allowed user IDs from static
+            let empty_vec = Vec::new();
+            let allowed_users = ALLOWED_QUOTE_USERS.get().unwrap_or(&empty_vec);
+            
+            let query = if allowed_users.is_empty() {
+                // If no users specified, use original query
+                "SELECT Id, UserId, Name, Content, Timestamp 
+                 FROM wdl_database.discord_messages
+                 WHERE CHAR_LENGTH(Content) >= 1
+                 ORDER BY RAND()
+                 LIMIT 1"
+            } else {
+                // If users specified, only select from those users
+                "SELECT Id, UserId, Name, Content, Timestamp 
+                 FROM wdl_database.discord_messages
+                 WHERE CHAR_LENGTH(Content) >= 1
+         AND UserId IN (SELECT value FROM (SELECT UNNEST(CAST(? AS CHAR) REGEXP '[0-9]+' AS value)) as ids)
+                 ORDER BY RAND()
+                 LIMIT 1"
+            };
 
-            // Execute the query
-            let result =
+            // Execute the query with or without user filter
+            let result = if allowed_users.is_empty() {
                 sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+            } else {
+                sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
+                    .bind(allowed_users.iter()
+                        .map(|id| id.to_string())
+                        .collect::<Vec<_>>()
+                        .join(","))
+            }
                     .fetch_one(db_pool)
                     .await;
 
