@@ -99,6 +99,9 @@ pub async fn guess_quote(
 
     match result {
         Ok(row) => {
+            // Log the correct answer for debugging
+            info!("GuessQuote Answer - User: {} (ID: {})", row.2, row.1);
+            
             let quote_message = format!(
                 "**Guess who said this quote:**\n\n> _{}_\n\nYou have 30 seconds to guess! Mention the user with @username.",
                 row.3
@@ -138,19 +141,29 @@ pub async fn guess_quote(
                     }
                     
                     let correct_user_id = row.1.to_string();
-                    let is_correct = guess.mentions.iter().any(|user| user.id.to_string() == correct_user_id);
+                    let correct_name = row.2.to_lowercase(); // Get the correct username
+                    let message_content = guess.content.to_lowercase();
                     
-                    // Store the guess result and mark user as having guessed
+                    // Check if the guess is correct
+                    let has_correct_mention = guess.mentions.iter().any(|user| user.id.to_string() == correct_user_id);
+                    let contains_correct_name = message_content.contains(&correct_name);
+                    let is_correct = has_correct_mention || contains_correct_name;
+                    
+                    // Store the guess result
                     guesses.push((guess.author.id, is_correct));
-                    guessed_users.insert(guess.author.id);
+                    
+                    // Only mark user as having guessed if they got it right
+                    if is_correct {
+                        guessed_users.insert(guess.author.id);
+                    }
                 }
             }
 
             let mut response = String::new();
             
             // First, show who said the quote with message link
-            response.push_str(&format!("Time's up! The quote was from <@{}> ([link](https://discord.com/channels/1043341819438645298/{}/{}))\n\n", 
-                row.1, command.channel_id, row.0));
+            response.push_str(&format!("Time's up! The quote was from {} on {} at {}\n\n", 
+                row.2, row.4.format("%Y-%m-%d"), row.4.format("%H:%M:%S")));
 
             // Handle no guesses case early
             if guesses.is_empty() {
