@@ -20,26 +20,40 @@ pub async fn show_scoreboard(
     command: &CommandInteraction,
     db_pool: &MySqlPool,
 ) {
+    info!("Fetching scoreboard...");
     let query = "
-    SELECT user_id, correct_guesses, total_attempts, points,
-           CAST((correct_guesses * 100.0 / total_attempts) AS DOUBLE) as accuracy
-    FROM wdl_database.quote_scores
-    ORDER BY points DESC, accuracy DESC
+    SELECT qs.user_id, 
+           COALESCE((
+               SELECT Name 
+               FROM wdl_database.discord_messages dm 
+               WHERE dm.UserId = qs.user_id 
+               ORDER BY dm.Timestamp DESC 
+               LIMIT 1
+           ), CAST(qs.user_id AS CHAR)) as Name,
+           qs.correct_guesses, 
+           qs.total_attempts, 
+           qs.points,
+           CAST((qs.correct_guesses * 100.0 / qs.total_attempts) AS DOUBLE) as accuracy
+    FROM wdl_database.quote_scores qs
+    ORDER BY qs.points DESC, accuracy DESC
     LIMIT 10;
     ";
 
-    let result = sqlx::query_as::<_, (i64, i32, i32, i32, f64)>(query)
+    let result = sqlx::query_as::<_, (i64, String, i32, i32, i32, f64)>(query)
         .fetch_all(db_pool)
         .await;
 
     match result {
         Ok(scores) => {
+            info!("Found {} players on scoreboard", scores.len());
             let mut scoreboard = String::from("🏆 **GuessQuote Leaderboard** 🏆\n\n");
-            for (index, (user_id, correct, total, points, accuracy)) in scores.iter().enumerate() {
+            for (index, (user_id, name, correct, total, points, accuracy)) in scores.iter().enumerate() {
+                info!("Rank {}: {} (ID: {}) - {} points, {}/{} correct ({}% accuracy)",
+                    index + 1, name, user_id, points, correct, total, accuracy.round());
                 scoreboard.push_str(&format!(
-                    "{}. <@{}> - {} points, {} correct out of {} attempts ({}% accuracy)\n",
+                    "{}. {} - {} points, {} correct out of {} attempts ({}% accuracy)\n",
                     index + 1,
-                    user_id,
+                    name,
                     points,
                     correct,
                     total,
@@ -90,6 +104,8 @@ pub async fn guess_quote(
     let empty_vec = Vec::new();
     let allowed_users = ALLOWED_QUOTE_USERS.get().unwrap_or(&empty_vec);
     
+    info!("Starting new quote game. Allowed users: {:?}", allowed_users);
+    
     let query = if allowed_users.is_empty() {
         // If no users specified, use original query
         "SELECT Id, UserId, Name, Content, Timestamp 
@@ -123,7 +139,8 @@ pub async fn guess_quote(
     match result {
         Ok(row) => {
             // Log the correct answer for debugging
-            info!("GuessQuote Answer - User: {} (ID: {})", row.2, row.1);
+            info!("Selected quote - ID: {}, User: {} (ID: {}), Content: {:?}, Time: {}", 
+                row.0, row.2, row.1, row.3, row.4);
             
             let quote_message = format!(
                 "**Guess who said this quote:**\n\n> _{}_\n\nYou have 30 seconds to guess! Mention the user with @username.",
@@ -160,6 +177,7 @@ pub async fn guess_quote(
                 {
                     // Skip if user has already guessed
                     if guessed_users.contains(&guess.author.id) {
+                        info!("Skipping duplicate guess from user {}", guess.author.id);
                         continue;
                     }
                     
@@ -167,16 +185,22 @@ pub async fn guess_quote(
                     let correct_name = row.2.to_lowercase(); // Get the correct username
                     let message_content = guess.content.to_lowercase();
                     
+                    info!("Processing guess from {} - content: {:?}", guess.author.id, message_content);
+                    
                     // Check if the guess is correct
                     let has_correct_mention = guess.mentions.iter().any(|user| user.id.to_string() == correct_user_id);
                     let contains_correct_name = message_content.contains(&correct_name);
                     let is_correct = has_correct_mention || contains_correct_name;
+                    
+                    info!("Guess analysis - has_mention: {}, has_name: {}, is_correct: {}", 
+                        has_correct_mention, contains_correct_name, is_correct);
                     
                     // Store the guess result
                     guesses.push((guess.author.id, is_correct));
                     
                     // Only mark user as having guessed if they got it right
                     if is_correct {
+                        info!("Correct guess from user {}", guess.author.id);
                         guessed_users.insert(guess.author.id);
                     }
                 }
@@ -190,11 +214,14 @@ pub async fn guess_quote(
 
             // Handle no guesses case early
             if guesses.is_empty() {
+                info!("No guesses received for this quote");
                 if let Err(why) = channel_id.say(&ctx.http, response).await {
                     warn!("Error sending response: {why}");
                 }
                 return;
             }
+            
+            info!("Processing {} guesses", guesses.len());
             
             // Collect results before updating scores
             let mut correct_guesses = Vec::new();
@@ -207,8 +234,14 @@ pub async fn guess_quote(
                 let points = if is_correct {
                     // Points formula: max 100 points at 0 seconds, decreasing to 10 points at 30 seconds
                     let time_points = ((30.0 - elapsed_secs) / 30.0 * 90.0 + 10.0) as i32;
-                    time_points.max(10) // Ensure minimum 10 points for correct answer
+                    let final_points = time_points.max(10); // Ensure minimum 10 points for correct answer
+                    info!(
+                        "Points calculation for user {}: elapsed_time={:.2}s, raw_points={}, final_points={}",
+                        user_id, elapsed_secs, time_points, final_points
+                    );
+                    final_points
                 } else {
+                    info!("No points awarded to user {} (incorrect guess)", user_id);
                     0 // No points for incorrect answers
                 };
 
@@ -219,7 +252,7 @@ pub async fn guess_quote(
                      ON DUPLICATE KEY UPDATE 
                      correct_guesses = correct_guesses + 1,
                      total_attempts = total_attempts + 1,
-                     points = points + ?"
+                     points = points + VALUES(points)"
                 } else {
                     "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
                      VALUES (?, 0, 1, 0)
@@ -227,9 +260,10 @@ pub async fn guess_quote(
                      total_attempts = total_attempts + 1"
                 };
 
+                info!("Updating database for user {} - is_correct: {}, points: {}", user_id, is_correct, points);
+
                 if let Err(e) = sqlx::query(update_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
-                    .bind(if is_correct { points } else { 0 })
                     .bind(if is_correct { points } else { 0 })
                     .execute(db_pool)
                     .await
@@ -251,6 +285,8 @@ pub async fn guess_quote(
 
                 let user_result = match stats {
                     Ok((correct, total, points, accuracy)) => {
+                        info!("Updated stats for user {}: {}/{} correct, {} points, {}% accuracy",
+                            user_id, correct, total, points, accuracy.round());
                         format!(
                             "<@{}> - +{} points! {} correct out of {} attempts ({}% accuracy)",
                             user_id,
