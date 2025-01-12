@@ -21,25 +21,26 @@ pub async fn show_scoreboard(
     db_pool: &MySqlPool,
 ) {
     let query = "
-    SELECT user_id, correct_guesses, total_attempts,
+    SELECT user_id, correct_guesses, total_attempts, points,
            CAST((correct_guesses * 100.0 / total_attempts) AS DOUBLE) as accuracy
     FROM wdl_database.quote_scores
-    ORDER BY accuracy DESC, correct_guesses DESC
+    ORDER BY points DESC, accuracy DESC
     LIMIT 10;
     ";
 
-    let result = sqlx::query_as::<_, (i64, i32, i32, f64)>(query)
+    let result = sqlx::query_as::<_, (i64, i32, i32, i32, f64)>(query)
         .fetch_all(db_pool)
         .await;
 
     match result {
         Ok(scores) => {
             let mut scoreboard = String::from("🏆 **GuessQuote Leaderboard** 🏆\n\n");
-            for (index, (user_id, correct, total, accuracy)) in scores.iter().enumerate() {
+            for (index, (user_id, correct, total, points, accuracy)) in scores.iter().enumerate() {
                 scoreboard.push_str(&format!(
-                    "{}. <@{}> - {} correct out of {} attempts ({}% accuracy)\n",
+                    "{}. <@{}> - {} points, {} correct out of {} attempts ({}% accuracy)\n",
                     index + 1,
                     user_id,
+                    points,
                     correct,
                     total,
                     accuracy.round()
@@ -101,7 +102,7 @@ pub async fn guess_quote(
         "SELECT Id, UserId, Name, Content, Timestamp 
          FROM wdl_database.discord_messages
          WHERE CHAR_LENGTH(Content) >= 20
-         AND UserId IN (SELECT value FROM (SELECT UNNEST(CAST(? AS CHAR) REGEXP '[0-9]+' AS value)) as ids)
+         AND FIND_IN_SET(UserId, ?) > 0
          ORDER BY RAND()
          LIMIT 1"
     };
@@ -201,22 +202,35 @@ pub async fn guess_quote(
             
             // Process all guesses and update scores
             for &(user_id, is_correct) in guesses.iter() {
+                // Calculate points based on response time (max 30 seconds)
+                let elapsed_secs = start_time.elapsed().as_secs_f64();
+                let points = if is_correct {
+                    // Points formula: max 100 points at 0 seconds, decreasing to 10 points at 30 seconds
+                    let time_points = ((30.0 - elapsed_secs) / 30.0 * 90.0 + 10.0) as i32;
+                    time_points.max(10) // Ensure minimum 10 points for correct answer
+                } else {
+                    0 // No points for incorrect answers
+                };
+
                 // Update scores in database
                 let update_query = if is_correct {
-                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts)
-                     VALUES (?, 1, 1)
+                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
+                     VALUES (?, 1, 1, ?)
                      ON DUPLICATE KEY UPDATE 
                      correct_guesses = correct_guesses + 1,
-                     total_attempts = total_attempts + 1"
+                     total_attempts = total_attempts + 1,
+                     points = points + ?"
                 } else {
-                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts)
-                     VALUES (?, 0, 1)
+                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
+                     VALUES (?, 0, 1, 0)
                      ON DUPLICATE KEY UPDATE 
                      total_attempts = total_attempts + 1"
                 };
 
                 if let Err(e) = sqlx::query(update_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
+                    .bind(if is_correct { points } else { 0 })
+                    .bind(if is_correct { points } else { 0 })
                     .execute(db_pool)
                     .await
                 {
@@ -225,21 +239,22 @@ pub async fn guess_quote(
 
                 // Get updated stats for the user
                 let stats_query = "
-                    SELECT correct_guesses, total_attempts,
+                    SELECT correct_guesses, total_attempts, points,
                            CAST((correct_guesses * 100.0 / total_attempts) AS DOUBLE) as accuracy
                     FROM wdl_database.quote_scores
                     WHERE user_id = ?";
 
-                let stats = sqlx::query_as::<_, (i32, i32, f64)>(stats_query)
+                let stats = sqlx::query_as::<_, (i32, i32, i32, f64)>(stats_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
                     .fetch_one(db_pool)
                     .await;
 
                 let user_result = match stats {
-                    Ok((correct, total, accuracy)) => {
+                    Ok((correct, total, points, accuracy)) => {
                         format!(
-                            "<@{}> - {} correct out of {} attempts ({}% accuracy)",
+                            "<@{}> - +{} points! {} correct out of {} attempts ({}% accuracy)",
                             user_id,
+                            if is_correct { points } else { 0 },
                             correct,
                             total,
                             accuracy.round()
@@ -332,7 +347,7 @@ pub async fn roll_quote(
                 "SELECT Id, UserId, Name, Content, Timestamp 
                  FROM wdl_database.discord_messages
                  WHERE CHAR_LENGTH(Content) >= 1
-         AND UserId IN (SELECT value FROM (SELECT UNNEST(CAST(? AS CHAR) REGEXP '[0-9]+' AS value)) as ids)
+         AND FIND_IN_SET(UserId, ?) > 0
                  ORDER BY RAND()
                  LIMIT 1"
             };

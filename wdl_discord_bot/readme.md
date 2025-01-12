@@ -68,3 +68,12 @@ DATABASE_URL=mysql://user:password@localhost/database_name
 ```bash
 cargo run --release
 ```
+
+
+## Useful commands
+
+login mysql: mysql -u root -p
+backup: mysqldump -u root -p wdl_database > wdl_database_$(date +%Y-%m-%d).sql
+
+database ammend: sqlx migrate add
+database commit: sqlx migrate run
