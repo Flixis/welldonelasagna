@@ -107,33 +107,24 @@ pub async fn guess_quote(
     
     info!("Starting new quote game. Allowed users: {:?}", allowed_users);
     
-    let query = if allowed_users.is_empty() {
-        // If no users specified, use original query
-        "SELECT Id, UserId, Name, Content, Timestamp 
+    // Build query
+    let base_query = "SELECT Id, UserId, Name, Content, Timestamp 
          FROM wdl_database.discord_messages
-         WHERE CHAR_LENGTH(Content) >= 20
-         ORDER BY RAND()
-         LIMIT 1"
-    } else {
-        // If users specified, only select from those users
-        "SELECT Id, UserId, Name, Content, Timestamp 
-         FROM wdl_database.discord_messages
-         WHERE CHAR_LENGTH(Content) >= 20
-         AND FIND_IN_SET(UserId, ?) > 0
-         ORDER BY RAND()
-         LIMIT 1"
-    };
+         WHERE CHAR_LENGTH(Content) >= 20 ";
+    let mut query_builder = sqlx::QueryBuilder::new(base_query);
 
-    // Execute the query with or without user filter
-    let result = if allowed_users.is_empty() {
-        sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-    } else {
-        sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-            .bind(allowed_users.iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(","))
+    if !allowed_users.is_empty() {
+        query_builder.push("AND UserId IN (");
+        let mut separated = query_builder.separated(", ");
+        for &id in allowed_users.iter() {
+            separated.push_bind(id);
+        }
+        separated.push_unseparated(") ");
     }
+
+    query_builder.push("ORDER BY RAND() LIMIT 1");
+
+    let result = query_builder.build_query_as::<(i64, i64, String, String, chrono::DateTime<Utc>)>()
         .fetch_one(db_pool)
         .await;
 
@@ -367,33 +358,24 @@ pub async fn roll_quote(
             let empty_vec = Vec::new();
             let allowed_users = ALLOWED_QUOTE_USERS.get().unwrap_or(&empty_vec);
             
-            let query = if allowed_users.is_empty() {
-                // If no users specified, use original query
-                "SELECT Id, UserId, Name, Content, Timestamp 
+            // Build query
+            let base_query = "SELECT Id, UserId, Name, Content, Timestamp 
                  FROM wdl_database.discord_messages
-                 WHERE CHAR_LENGTH(Content) >= 1
-                 ORDER BY RAND()
-                 LIMIT 1"
-            } else {
-                // If users specified, only select from those users
-                "SELECT Id, UserId, Name, Content, Timestamp 
-                 FROM wdl_database.discord_messages
-                 WHERE CHAR_LENGTH(Content) >= 1
-         AND FIND_IN_SET(UserId, ?) > 0
-                 ORDER BY RAND()
-                 LIMIT 1"
-            };
+                 WHERE CHAR_LENGTH(Content) >= 1 ";
+            let mut query_builder = sqlx::QueryBuilder::new(base_query);
 
-            // Execute the query with or without user filter
-            let result = if allowed_users.is_empty() {
-                sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-            } else {
-                sqlx::query_as::<_, (i64, i64, String, String, chrono::DateTime<Utc>)>(query)
-                    .bind(allowed_users.iter()
-                        .map(|id| id.to_string())
-                        .collect::<Vec<_>>()
-                        .join(","))
+            if !allowed_users.is_empty() {
+                query_builder.push("AND UserId IN (");
+                let mut separated = query_builder.separated(", ");
+                for &id in allowed_users.iter() {
+                    separated.push_bind(id);
+                }
+                separated.push_unseparated(") ");
             }
+
+            query_builder.push("ORDER BY RAND() LIMIT 1");
+
+            let result = query_builder.build_query_as::<(i64, i64, String, String, chrono::DateTime<Utc>)>()
                     .fetch_one(db_pool)
                     .await;
 
