@@ -242,30 +242,25 @@ pub async fn guess_quote(
                     );
                     final_points
                 } else {
-                    info!("No points awarded to user {} (incorrect guess)", user_id);
-                    0 // No points for incorrect answers
+                    info!("Subtracting points from user {} (incorrect guess)", user_id);
+                    -5 // Subtract 5 points for incorrect answers
                 };
 
                 // Update scores in database
-                let update_query = if is_correct {
-                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
-                     VALUES (?, 1, 1, ?)
+                let update_query = "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
+                     VALUES (?, ?, 1, ?)
                      ON DUPLICATE KEY UPDATE 
-                     correct_guesses = correct_guesses + 1,
+                     correct_guesses = correct_guesses + VALUES(correct_guesses),
                      total_attempts = total_attempts + 1,
-                     points = points + VALUES(points)"
-                } else {
-                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
-                     VALUES (?, 0, 1, 0)
-                     ON DUPLICATE KEY UPDATE 
-                     total_attempts = total_attempts + 1"
-                };
+                     points = points + ?";
 
                 info!("Updating database for user {} - is_correct: {}, points: {}", user_id, is_correct, points);
 
                 if let Err(e) = sqlx::query(update_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
-                    .bind(if is_correct { points } else { 0 })
+                    .bind(if is_correct { 1 } else { 0 })
+                    .bind(points)
+                    .bind(points)
                     .execute(db_pool)
                     .await
                 {
@@ -289,9 +284,9 @@ pub async fn guess_quote(
                         info!("Updated stats for user {}: {}/{} correct, {} points, {}% accuracy",
                             user_id, correct, total, points, accuracy.round());
                         format!(
-                            "<@{}> - +{} points! {} correct out of {} attempts ({}% accuracy)",
+                            "<@{}> - {} points! {} correct out of {} attempts ({}% accuracy)",
                             user_id,
-                            if is_correct { points } else { 0 },
+                            if points >= 0 { format!("+{}", points) } else { points.to_string() },
                             correct,
                             total,
                             accuracy.round()
