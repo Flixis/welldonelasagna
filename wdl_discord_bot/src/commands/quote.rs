@@ -22,19 +22,20 @@ pub async fn show_scoreboard(
 ) {
     info!("Fetching scoreboard...");
     let query = "
+    WITH latest_names AS (
+        SELECT UserId,
+               Name,
+               ROW_NUMBER() OVER (PARTITION BY UserId ORDER BY Timestamp DESC) as rn
+        FROM wdl_database.discord_messages
+    )
     SELECT qs.user_id, 
-           COALESCE((
-               SELECT Name 
-               FROM wdl_database.discord_messages dm 
-               WHERE dm.UserId = qs.user_id 
-               ORDER BY dm.Timestamp DESC 
-               LIMIT 1
-           ), CAST(qs.user_id AS CHAR)) as Name,
+           COALESCE(ln.Name, CONVERT(qs.user_id, CHAR CHARACTER SET utf8mb4)) as Name,
            qs.correct_guesses, 
            qs.total_attempts, 
            qs.points,
            CAST((qs.correct_guesses * 100.0 / qs.total_attempts) AS DOUBLE) as accuracy
     FROM wdl_database.quote_scores qs
+    LEFT JOIN latest_names ln ON ln.UserId = qs.user_id AND ln.rn = 1
     ORDER BY qs.points DESC, accuracy DESC
     LIMIT 10;
     ";
