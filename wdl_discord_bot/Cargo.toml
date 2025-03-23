@@ -22,3 +22,6 @@ uuid = { version = "1.11.1", features = ["v4", "fast-rng"] }
 whoami = "1.5.2"
 log = { version = "0.4.24"}
 simplelog = "0.12.2"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "x86_64-linux-gnu-gcc"

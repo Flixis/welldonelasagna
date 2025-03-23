@@ -33,6 +33,8 @@ pub async fn show_scoreboard(
            qs.correct_guesses, 
            qs.total_attempts, 
            qs.points,
+           qs.current_streak,
+           qs.best_streak,
            CAST((qs.correct_guesses * 100.0 / qs.total_attempts) AS DOUBLE) as accuracy
     FROM wdl_database.quote_scores qs
     LEFT JOIN latest_names ln ON ln.UserId = qs.user_id AND ln.rn = 1
@@ -40,7 +42,7 @@ pub async fn show_scoreboard(
     LIMIT 10;
     ";
 
-    let result = sqlx::query_as::<_, (i64, String, i32, i32, i32, f64)>(query)
+    let result = sqlx::query_as::<_, (i64, String, i32, i32, i32, i32, i32, f64)>(query)
         .fetch_all(db_pool)
         .await;
 
@@ -48,17 +50,19 @@ pub async fn show_scoreboard(
         Ok(scores) => {
             info!("Found {} players on scoreboard", scores.len());
             let mut scoreboard = String::from("🏆 **GuessQuote Leaderboard** 🏆\n\n");
-            for (index, (user_id, name, correct, total, points, accuracy)) in scores.iter().enumerate() {
-                info!("Rank {}: {} (ID: {}) - {} points, {}/{} correct ({}% accuracy)",
-                    index + 1, name, user_id, points, correct, total, accuracy.round());
+            for (index, (user_id, name, correct, total, points, current_streak, best_streak, accuracy)) in scores.iter().enumerate() {
+                info!("Rank {}: {} (ID: {}) - {} points, {}/{} correct, streak: {}/{} ({}% accuracy)",
+                    index + 1, name, user_id, points, correct, total, current_streak, best_streak, accuracy.round());
                 scoreboard.push_str(&format!(
-                    "{}. {} - {} points, {} correct out of {} attempts ({}% accuracy)\n",
+                    "{}. {} - {} points, {} correct out of {} attempts ({}% accuracy) | Streak: {} 🔥 (Best: {})\n",
                     index + 1,
                     name,
                     points,
                     correct,
                     total,
-                    accuracy.round()
+                    accuracy.round(),
+                    current_streak,
+                    best_streak
                 ));
             }
 
@@ -238,20 +242,49 @@ pub async fn guess_quote(
                 };
 
                 // Update scores in database
-                let update_query = "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
+                // Calculate streak bonus (5 points per streak level, max 25 bonus points)
+                let streak_bonus = if is_correct {
+                    let current_streak = sqlx::query_as::<_, (i32,)>("SELECT current_streak FROM wdl_database.quote_scores WHERE user_id = ?")
+                        .bind(user_id.to_string().parse::<i64>().unwrap())
+                        .fetch_optional(db_pool)
+                        .await
+                        .map(|r| r.map(|s| s.0).unwrap_or(0))
+                        .unwrap_or(0);
+                    (current_streak.min(5) * 5) as i32
+                } else {
+                    0
+                };
+
+                let final_points = points + streak_bonus;
+                info!("Points breakdown - base: {}, streak_bonus: {}, final: {}", points, streak_bonus, final_points);
+
+                // Use separate queries for correct/incorrect to avoid string formatting
+                let update_query = if is_correct {
+                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
                      VALUES (?, ?, 1, ?)
                      ON DUPLICATE KEY UPDATE 
                      correct_guesses = correct_guesses + VALUES(correct_guesses),
                      total_attempts = total_attempts + 1,
-                     points = points + ?";
+                     points = points + ?,
+                     current_streak = current_streak + 1,
+                     best_streak = GREATEST(best_streak, current_streak + 1)"
+                } else {
+                    "INSERT INTO wdl_database.quote_scores (user_id, correct_guesses, total_attempts, points)
+                     VALUES (?, ?, 1, ?)
+                     ON DUPLICATE KEY UPDATE 
+                     correct_guesses = correct_guesses + VALUES(correct_guesses),
+                     total_attempts = total_attempts + 1,
+                     points = points + ?,
+                     current_streak = 0"
+                };
 
                 info!("Updating database for user {} - is_correct: {}, points: {}", user_id, is_correct, points);
 
                 if let Err(e) = sqlx::query(update_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
                     .bind(if is_correct { 1 } else { 0 })
-                    .bind(points)
-                    .bind(points)
+                    .bind(final_points)
+                    .bind(final_points)
                     .execute(db_pool)
                     .await
                 {
@@ -260,27 +293,34 @@ pub async fn guess_quote(
 
                 // Get updated stats for the user
                 let stats_query = "
-                    SELECT correct_guesses, total_attempts, points,
+                    SELECT correct_guesses, total_attempts, points, current_streak, best_streak,
                            CAST((correct_guesses * 100.0 / total_attempts) AS DOUBLE) as accuracy
                     FROM wdl_database.quote_scores
                     WHERE user_id = ?";
 
-                let stats = sqlx::query_as::<_, (i32, i32, i32, f64)>(stats_query)
+                let stats = sqlx::query_as::<_, (i32, i32, i32, i32, i32, f64)>(stats_query)
                     .bind(user_id.to_string().parse::<i64>().unwrap())
                     .fetch_one(db_pool)
                     .await;
 
                 let user_result = match stats {
-                    Ok((correct, total, points, accuracy)) => {
-                        info!("Updated stats for user {}: {}/{} correct, {} points, {}% accuracy",
-                            user_id, correct, total, points, accuracy.round());
+                    Ok((correct, total, _total_points, current_streak, best_streak, accuracy)) => {
+                        let streak_text = if current_streak > 0 {
+                            format!(" | 🔥 Streak: {} (Best: {})", current_streak, best_streak)
+                        } else {
+                            String::new()
+                        };
+                        
+                        info!("Updated stats for user {}: {}/{} correct, round points: {} (streak: {}/{}), {}% accuracy",
+                            user_id, correct, total, final_points, current_streak, best_streak, accuracy.round());
                         format!(
-                            "<@{}> - {} points! {} correct out of {} attempts ({}% accuracy)",
+                            "<@{}> - {} points! {} correct out of {} attempts ({}% accuracy){}",
                             user_id,
-                            if points >= 0 { format!("+{}", points) } else { points.to_string() },
+                            if final_points >= 0 { format!("+{}", final_points) } else { final_points.to_string() },
                             correct,
                             total,
-                            accuracy.round()
+                            accuracy.round(),
+                            streak_text
                         )
                     }
                     Err(e) => {
@@ -391,12 +431,16 @@ pub async fn roll_quote(
                     let timestamp_string = row.4.to_string();
                     // Now split the string and collect into Vec
                     let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                    let message = format!(
-                        "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
-                        row.1, timestamp[0], timestamp[1], row.3
-                    );
-
-                    if let Err(why) = channel_id.say(&ctx.http, message).await {
+                if let Err(why) = channel_id
+                    .say(
+                        &ctx.http,
+                        &format!(
+                            "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
+                            row.1, timestamp[0], timestamp[1], row.3
+                        ),
+                    )
+                    .await
+                {
                         warn!("Something went wrong: {why}");
                     }
                 }
