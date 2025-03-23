@@ -1,143 +1,17 @@
-use chrono::{Datelike, Local, NaiveDate, Utc, Weekday};
+use chrono::{Datelike, Local, NaiveDate, Utc};
 use log::{error, info};
 use serenity::{
     all::{
-        ChannelId, CommandInteraction, CommandOptionType, CreateCommand, CreateEmbed,CreateInteractionResponseFollowup
+        ChannelId, CommandInteraction, CreateInteractionResponseFollowup,
     },
-    builder::{CreateCommandOption, CreateEmbedFooter, CreateMessage},
+    builder::{CreateEmbed, CreateEmbedFooter, CreateMessage},
     model::Timestamp,
     prelude::*,
 };
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct F1Calendar {
-    #[serde(rename = "MRData")]
-    mr_data: MRData,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MRData {
-    #[serde(rename = "RaceTable")]
-    race_table: RaceTable,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct RaceTable {
-    #[serde(rename = "Races")]
-    races: Vec<Race>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Race {
-    #[serde(rename = "raceName")]
-    race_name: String,
-    #[serde(rename = "Circuit")]
-    circuit: Circuit,
-    #[serde(rename = "date")]
-    date: String,
-    #[serde(rename = "time", default)]
-    time: String,
-    #[serde(rename = "round")]
-    round: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Circuit {
-    #[serde(rename = "circuitName")]
-    circuit_name: String,
-    #[serde(rename = "Location")]
-    location: Location,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Location {
-    #[serde(rename = "locality")]
-    locality: String,
-    #[serde(rename = "country")]
-    country: String,
-}
-
-// Function to fetch F1 calendar for the current year
-async fn fetch_f1_calendar() -> Result<F1Calendar, reqwest::Error> {
-    let current_year = Utc::now().year().to_string();
-    let url = format!("https://api.jolpi.ca/ergast/f1/{}/races.json", current_year);
-    
-    let client = reqwest::Client::new();
-    let response = client.get(&url).send().await?;
-    
-    response.json::<F1Calendar>().await
-}
-
-// Function to find the next upcoming race
-fn find_next_race(races: &[Race]) -> Option<Race> {
-    let today = Local::now().date_naive();
-    
-    races.iter()
-        .find(|race| {
-            NaiveDate::from_str(&race.date).ok()
-                .filter(|race_date| *race_date >= today)
-                .is_some()
-        })
-        .cloned()
-}
-
-// Check if today is Thursday
-fn is_thursday() -> bool {
-    Local::now().weekday() == Weekday::Thu
-}
-
-// Function to create a rich embed for the race announcement
-fn create_race_embed(race: &Race) -> CreateEmbed {
-    let race_date = NaiveDate::from_str(&race.date).unwrap_or_default();
-    let today = Local::now().date_naive();
-    let days_until = race_date.signed_duration_since(today).num_days();
-    
-    let embed = CreateEmbed::default();
-    embed
-        .title(format!("🏎️ Upcoming F1 Race: {} 🏎️", race.race_name))
-        .color(0xFF1801) // F1 red color
-        .thumbnail("https://www.formula1.com/etc/designs/fom-website/images/f1_logo.png")
-        .description(format!(
-            "**Round {}** of the Formula 1 Championship is coming up!",
-            race.round
-        ))
-        .field(
-            "Circuit",
-            format!("{}", race.circuit.circuit_name),
-            true
-        )
-        .field(
-            "Location",
-            format!("{}, {}", race.circuit.location.locality, race.circuit.location.country),
-            true
-        )
-        .field(
-            "Date & Time",
-            format!("{} {}", race.date, if !race.time.is_empty() { &race.time } else { "TBA" }),
-            true
-        )
-        .field(
-            "Countdown",
-            format!("**{}** days until race day!", days_until),
-            false
-        )
-        .footer(CreateEmbedFooter::new("Data provided by Ergast F1 API"))
-        .timestamp(Timestamp::now())
-}
-
-// Function to register the F1 command with subcommands
-pub fn register() -> CreateCommand {
-    let next_option = CreateCommandOption::new(CommandOptionType::SubCommand, "next", "Show the next upcoming F1 race");
-    let season_option = CreateCommandOption::new(CommandOptionType::SubCommand, "season", "Show all races for the current F1 season");
-    
-    CreateCommand::new("f1")
-        .description("Check F1 race information")
-        .dm_permission(true)
-        .add_option(next_option)
-        .add_option(season_option)
-}
+use crate::commands::f1::api::{fetch_f1_calendar, find_next_race, is_thursday};
+use crate::commands::f1::embed::create_race_embed;
 
 // Command handler for the f1 command and its subcommands
 pub async fn handle_commands(ctx: Context, command: &CommandInteraction) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -208,7 +82,7 @@ pub async fn check_upcoming_race(ctx: Context, channel_id: ChannelId) -> Result<
     Ok(())
 }
 
-// Command handler for the f1 command
+// Command handler for the next race subcommand
 async fn show_next_race(ctx: Context, command: &CommandInteraction) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Fetch F1 calendar
     match fetch_f1_calendar().await {

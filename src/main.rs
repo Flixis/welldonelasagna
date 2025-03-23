@@ -12,7 +12,7 @@ use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
 
-use commands::{quote, scraper, version, f1_race};
+use commands::{quote, scraper, version, f1};
 
 mod cli;
 mod commands;
@@ -120,7 +120,7 @@ impl EventHandler for Handler {
                 .description("Start a game where you have to guess who said a quote"),
             quote::register(),
             version::register(),
-            f1_race::register(),
+            f1::register(),
         ];
 
         Command::set_global_commands(&ctx.http, commands)
@@ -132,7 +132,7 @@ impl EventHandler for Handler {
         let channel_id = self.channel_id;
         
         // Check for upcoming F1 races immediately at startup
-        if let Err(e) = f1_race::check_upcoming_race(ctx.clone(), channel_id).await {
+        if let Err(e) = f1::check_upcoming_race(ctx.clone(), channel_id).await {
             warn!("Error checking F1 races at startup: {:?}", e);
         }
         
@@ -143,7 +143,7 @@ impl EventHandler for Handler {
             loop {
                 interval.tick().await;
                 // This will only send messages on Thursdays
-                if let Err(e) = f1_race::check_upcoming_race(ctx_clone.clone(), channel_id).await {
+                if let Err(e) = f1::check_upcoming_race(ctx_clone.clone(), channel_id).await {
                     warn!("Error checking F1 races: {:?}", e);
                 }
             }
@@ -200,7 +200,7 @@ impl EventHandler for Handler {
                     }
                 }
                 "f1" => {
-                    if let Err(e) = f1_race::handle_commands(ctx, &command).await {
+                    if let Err(e) = f1::handle_commands(ctx, &command).await {
                         warn!("Error handling F1 command: {:?}", e);
                     }
                 }
