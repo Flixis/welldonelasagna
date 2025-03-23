@@ -42,7 +42,7 @@ pub async fn show_scoreboard(
     LIMIT 10;
     ";
 
-    let result = sqlx::query_as::<_, (i64, String, i32, i32, i32, i32, i32, f64)>(query)
+    let result = sqlx::query_as::<_, (i64, String, i32, i32, i32, i32, i32, Option<f64>)>(query)
         .fetch_all(db_pool)
         .await;
 
@@ -51,8 +51,9 @@ pub async fn show_scoreboard(
             info!("Found {} players on scoreboard", scores.len());
             let mut scoreboard = String::from("🏆 **GuessQuote Leaderboard** 🏆\n\n");
             for (index, (user_id, name, correct, total, points, current_streak, best_streak, accuracy)) in scores.iter().enumerate() {
+                let accuracy_value = accuracy.unwrap_or(0.0);
                 info!("Rank {}: {} (ID: {}) - {} points, {}/{} correct, streak: {}/{} ({}% accuracy)",
-                    index + 1, name, user_id, points, correct, total, current_streak, best_streak, accuracy.round());
+                    index + 1, name, user_id, points, correct, total, current_streak, best_streak, accuracy_value.round());
                 scoreboard.push_str(&format!(
                     "{}. {} - {} points, {} correct out of {} attempts ({}% accuracy) | Streak: {} 🔥 (Best: {})\n",
                     index + 1,
@@ -60,7 +61,7 @@ pub async fn show_scoreboard(
                     points,
                     correct,
                     total,
-                    accuracy.round(),
+                    accuracy_value.round(),
                     current_streak,
                     best_streak
                 ));
