@@ -1,6 +1,6 @@
 [package]
 name = "wdl_discord_bot"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -15,6 +15,7 @@ clap = { version = "4.5.32", features = ["derive"] }
 colored = "3.0.0"
 dotenv = "0.15.0"
 rand = "0.9.0"
+reqwest = { version = "0.12.15", features = ["json"] }
 serenity = { version = "0.12.4", features = ["collector", "model", "chrono"] }
 sqlx = { version = "0.8.3", features = ["mysql", "runtime-tokio", "chrono"] }
 tokio = { version = "1.44.1", features = ["full"] }
@@ -22,5 +23,7 @@ uuid = { version = "1.16.0", features = ["v4", "fast-rng"] }
 whoami = "1.5.2"
 log = { version = "0.4.26"}
 simplelog = "0.12.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 
 

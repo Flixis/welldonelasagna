@@ -1,4 +1,4 @@
-use log::info;
+use log::{info, error};
 use serenity::all::ChannelId;
 use serenity::{futures::StreamExt, model::Timestamp};
 use sqlx::MySqlPool;
@@ -10,13 +10,12 @@ pub async fn scrape_messages(
     db_pool: &MySqlPool,
     start_date: Timestamp,
     end_date: Timestamp,
-) {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting scrape");
 
     let mut messages = channel_id.messages_iter(&ctx.http).boxed();
 
     while let Some(message) = messages.next().await {
-        info!("Receiving message....");
         match message {
             Ok(msg) => {
                 if msg.timestamp > start_date && msg.timestamp < end_date.into() {
@@ -43,8 +42,8 @@ pub async fn scrape_messages(
                     ";
 
                     // Execute the query
-                    let _ = sqlx::query(insert_query)
-                        .bind(i64::from(msg.id)) // Assuming msg.id is an ID type that can be converted to i64
+                    if let Err(e) = sqlx::query(insert_query)
+                        .bind(i64::from(msg.id))
                         .bind(i64::from(msg.channel_id))
                         .bind(i64::from(msg.author.id))
                         .bind(msg.author.name)
@@ -53,11 +52,18 @@ pub async fn scrape_messages(
                         .bind(premium_type_str)
                         .execute(db_pool)
                         .await
-                        .map_err(|e| info!("Failed to insert message: {}", e));
+                    {
+                        error!("Failed to insert message: {}", e);
+                        // Continue processing other messages even if one fails
+                    }
                 }
             }
-            Err(why) => info!("Error while fetching a message: {:?}", why),
+            Err(e) => {
+                error!("Error while fetching a message: {:?}", e);
+                // Continue processing other messages
+            }
         }
     }
     info!("Done downloading!");
+    Ok(())
 }

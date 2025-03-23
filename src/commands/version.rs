@@ -3,12 +3,13 @@ use serenity::{
     builder::CreateEmbed,
     prelude::*,
 };
+use log::{info, warn};
 
 pub fn register() -> CreateCommand {
     CreateCommand::new("version").description("Show bot version information")
 }
 
-pub async fn show_version(ctx: Context, command: &CommandInteraction) {
+pub async fn show_version(ctx: Context, command: &CommandInteraction) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let version = env!("CARGO_PKG_VERSION");
     let build_id = env!("BUILD_ID");
 
@@ -17,7 +18,7 @@ pub async fn show_version(ctx: Context, command: &CommandInteraction) {
         .field("Version", version, true)
         .field("Build ID", build_id, true);
 
-    if let Err(why) = command
+    if let Err(e) = command
         .create_response(
             &ctx.http,
             CreateInteractionResponse::Message(
@@ -26,6 +27,10 @@ pub async fn show_version(ctx: Context, command: &CommandInteraction) {
         )
         .await
     {
-        println!("Cannot respond to slash command: {why}");
+        warn!("Cannot respond to version command: {}", e);
+        return Err(Box::new(e));
     }
+    
+    info!("Version command executed successfully");
+    Ok(())
 }
