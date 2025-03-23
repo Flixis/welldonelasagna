@@ -390,7 +390,7 @@ pub async fn roll_quote(
     if *counter >= roll_amount {
         *counter = 0; // Reset the counter
 
-        let rand = rand::thread_rng().gen_range(0..100);
+        let rand = rand::rng().random_range(0..100);
         info!("rand generated {:?}", rand);
 
         if rand < 1 {
