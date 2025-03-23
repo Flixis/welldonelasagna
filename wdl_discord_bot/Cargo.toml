@@ -6,22 +6,21 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-rand = "0.8.5"
+rand = "0.9.0"
 
 [dependencies]
-toml = "0.8.8"
-chrono = "0.4.39"
-clap = { version = "4.5.26", features = ["derive"] }
+toml = "0.8.20"
+chrono = "0.4.40"
+clap = { version = "4.5.32", features = ["derive"] }
 colored = "3.0.0"
 dotenv = "0.15.0"
-rand = "0.8.5"
+rand = "0.9.0"
 serenity = { version = "0.12.4", features = ["collector", "model", "chrono"] }
 sqlx = { version = "0.8.3", features = ["mysql", "runtime-tokio", "chrono"] }
-tokio = { version = "1.43.0", features = ["full"] }
-uuid = { version = "1.11.1", features = ["v4", "fast-rng"] }
+tokio = { version = "1.44.1", features = ["full"] }
+uuid = { version = "1.16.0", features = ["v4", "fast-rng"] }
 whoami = "1.5.2"
-log = { version = "0.4.24"}
+log = { version = "0.4.26"}
 simplelog = "0.12.2"
 
-[target.x86_64-unknown-linux-gnu]
-linker = "x86_64-linux-gnu-gcc"
+

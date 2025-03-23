@@ -35,17 +35,12 @@ cargo build --release
 
 ### Cross Compilation
 
-To build for ARM64 Linux (e.g., Raspberry Pi):
+To build for X86_GNU Linux from Windows
 
-1. Install cross-rs:
-```bash
-cargo install cross --git https://github.com/cross-rs/cross
-```
-
-2. Build using cross:
-```bash
-cross build --target x86_64-unknown-linux-gnu
-```
+- Install `Cygwin`
+- Install `gcc` and `mingw64-x86_64-gcc` ^V12.04
+- Install rust `x86_64-pc-windows-gnu` toolchain
+- Run 'cargo build --target x86_64-pc-windows-gnu'
 
 ## Database Setup
 
