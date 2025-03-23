@@ -1,5 +1,5 @@
 use chrono::Utc;
-use log::{info, warn};
+use log::{info, warn, error};
 use rand::Rng;
 use serenity::all::{
     ChannelId, CommandInteraction, CreateInteractionResponse, CreateInteractionResponseMessage,
@@ -19,7 +19,7 @@ pub async fn show_scoreboard(
     ctx: serenity::client::Context,
     command: &CommandInteraction,
     db_pool: &MySqlPool,
-) {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Fetching scoreboard...");
     let query = "
     WITH latest_names AS (
@@ -71,7 +71,7 @@ pub async fn show_scoreboard(
                 scoreboard.push_str("No scores recorded yet! Start playing with /guessquote");
             }
 
-            if let Err(why) = command
+            if let Err(e) = command
                 .create_response(
                     &ctx.http,
                     CreateInteractionResponse::Message(
@@ -80,7 +80,8 @@ pub async fn show_scoreboard(
                 )
                 .await
             {
-                warn!("Error sending scoreboard: {why}");
+                warn!("Error sending scoreboard: {}", e);
+                return Err(Box::new(e));
             }
         }
         Err(e) => {
@@ -95,17 +96,21 @@ pub async fn show_scoreboard(
                 )
                 .await
             {
-                warn!("Error sending error message: {why}");
+                warn!("Error sending error message: {}", why);
+                return Err(Box::new(why));
             }
+            return Err(Box::new(e));
         }
     }
+    
+    Ok(())
 }
 
 pub async fn guess_quote(
     ctx: serenity::client::Context,
     command: &CommandInteraction,
     db_pool: &MySqlPool,
-) {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Get allowed user IDs from static
     let empty_vec = Vec::new();
     let allowed_users = ALLOWED_QUOTE_USERS.get().unwrap_or(&empty_vec);
@@ -154,8 +159,8 @@ pub async fn guess_quote(
                 )
                 .await
             {
-                warn!("Error sending quote: {why}");
-                return;
+                warn!("Error sending quote: {}", why);
+                return Err(Box::new(why));
             }
 
             // Get the channel ID from the command
@@ -212,10 +217,10 @@ pub async fn guess_quote(
             // Handle no guesses case early
             if guesses.is_empty() {
                 info!("No guesses received for this quote");
-                if let Err(why) = channel_id.say(&ctx.http, response).await {
-                    warn!("Error sending response: {why}");
+                if let Err(e) = channel_id.say(&ctx.http, response).await {
+                    warn!("Error sending response: {}", e);
                 }
-                return;
+                return Ok(());
             }
             
             info!("Processing {} guesses", guesses.len());
@@ -354,9 +359,12 @@ pub async fn guess_quote(
                 }
             }
 
-            if let Err(why) = channel_id.say(&ctx.http, response).await {
-                warn!("Error sending response: {why}");
+            if let Err(e) = channel_id.say(&ctx.http, response).await {
+                warn!("Error sending response: {}", e);
+                return Err(Box::new(e));
             }
+            
+            Ok(())
         }
         Err(e) => {
             warn!("Failed to execute query: {}", e);
@@ -370,8 +378,10 @@ pub async fn guess_quote(
                 )
                 .await
             {
-                warn!("Error sending error message: {why}");
+                warn!("Error sending error message: {}", why);
+                return Err(Box::new(why));
             }
+            Err(Box::new(e))
         }
     }
 }
@@ -383,11 +393,11 @@ pub async fn roll_quote(
     counter: &mut usize,
     roll_amount: usize,
     db_pool: &MySqlPool,
-) {
-    info!("Connected to {:?}", channel_id);
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    info!("roll_quote: Connected to {:?}", channel_id);
 
     *counter += 1; // Increment counter
-    info!("counter at: {:?}", counter);
+    info!("roll_quote: counter at: {:?}", counter);
     if *counter >= roll_amount {
         *counter = 0; // Reset the counter
 
@@ -432,23 +442,26 @@ pub async fn roll_quote(
                     let timestamp_string = row.4.to_string();
                     // Now split the string and collect into Vec
                     let timestamp: Vec<_> = timestamp_string.split(" ").collect();
-                if let Err(why) = channel_id
-                    .say(
-                        &ctx.http,
-                        &format!(
-                            "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
-                            row.1, timestamp[0], timestamp[1], row.3
-                        ),
-                    )
-                    .await
-                {
-                        warn!("Something went wrong: {why}");
+                    
+                    if let Err(e) = channel_id
+                        .say(
+                            &ctx.http,
+                            &format!(
+                                "> ** <@{}> on {} at {}:**\n> \n> _'{}'_",
+                                row.1, timestamp[0], timestamp[1], row.3
+                            ),
+                        )
+                        .await
+                    {
+                        error!("roll_quote: Failed to send random quote: {}", e);
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to execute query: {}", e);
+                    error!("roll_quote: Failed to execute random quote query: {}", e);
                 }
             }
         }
     }
+    
+    Ok(())
 }

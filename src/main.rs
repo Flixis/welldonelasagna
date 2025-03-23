@@ -10,8 +10,9 @@ use serenity::{
 };
 use sqlx::mysql::MySqlPool;
 use tokio::sync::Mutex;
+use tokio::time::{interval, Duration};
 
-use commands::{quote, scraper, version};
+use commands::{quote, scraper, version, f1};
 
 mod cli;
 mod commands;
@@ -119,11 +120,34 @@ impl EventHandler for Handler {
                 .description("Start a game where you have to guess who said a quote"),
             quote::register(),
             version::register(),
+            f1::register(),
         ];
 
         Command::set_global_commands(&ctx.http, commands)
             .await
             .expect("Failed to create commands");
+
+        // Clone the context and channel_id for use in the F1 race check task
+        let ctx_clone = ctx.clone();
+        let channel_id = self.channel_id;
+        
+        // Check for upcoming F1 races immediately at startup
+        if let Err(e) = f1::check_upcoming_race(ctx.clone(), channel_id).await {
+            warn!("Error checking F1 races at startup: {:?}", e);
+        }
+        
+        // Spawn a task to check for upcoming F1 races every day
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(24 * 60 * 60)); // Check every 24 hours
+            
+            loop {
+                interval.tick().await;
+                // This will only send messages on Thursdays
+                if let Err(e) = f1::check_upcoming_race(ctx_clone.clone(), channel_id).await {
+                    warn!("Error checking F1 races: {:?}", e);
+                }
+            }
+        });
 
         if self.scraping {
             // let start_date: DateTime<Utc> = Utc::now() - Duration::days(1); // 7 days ago
@@ -141,34 +165,48 @@ impl EventHandler for Handler {
                 None => panic!("Start date not set"),
             };
 
-            info!("Using dates: {start_date} and {end_date}");
+            info!("main: Using dates: {start_date} and {end_date}");
 
-            scraper::scrape_messages(
+            if let Err(e) = scraper::scrape_messages(
                 ctx,
                 &bot,
                 self.channel_id,
                 &self.db_pool,
                 start_date,
                 end_date,
-            )
-            .await;
+            ).await {
+                warn!("Error scraping messages: {:?}", e);
+            }
         }
-        info!("{} is connected!", bot.user.name);
+        info!("ready: {} is connected!", bot.user.name);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: serenity::model::application::Interaction) {
         if let serenity::model::application::Interaction::Command(command) = interaction {
             match command.data.name.as_str() {
                 "guessquote" => {
-                    quote::guess_quote(ctx, &command, &self.db_pool).await;
+                    if let Err(e) = quote::guess_quote(ctx, &command, &self.db_pool).await {
+                        warn!("Error handling guessquote command: {:?}", e);
+                    }
                 }
                 "scoreboard" => {
-                    quote::show_scoreboard(ctx, &command, &self.db_pool).await;
+                    if let Err(e) = quote::show_scoreboard(ctx, &command, &self.db_pool).await {
+                        warn!("Error handling scoreboard command: {:?}", e);
+                    }
                 }
                 "version" => {
-                    version::show_version(ctx, &command).await;
+                    if let Err(e) = version::show_version(ctx, &command).await {
+                        warn!("Error handling version command: {:?}", e);
+                    }
                 }
-                _ => {}
+                "f1" => {
+                    if let Err(e) = f1::handle_commands(ctx, &command).await {
+                        warn!("Error handling F1 command: {:?}", e);
+                    }
+                }
+                _ => {
+                    warn!("Unknown command: {}", command.data.name);
+                }
             }
         }
     }
@@ -181,7 +219,7 @@ impl EventHandler for Handler {
             None => 15, // Default value
         };
 
-        quote::roll_quote(
+        if let Err(e) = quote::roll_quote(
             ctx,
             &msg,
             self.channel_id,
@@ -189,9 +227,11 @@ impl EventHandler for Handler {
             effective_roll_amount,
             &self.db_pool,
         )
-        .await;
+        .await {
+            warn!("Error handling roll quote: {:?}", e);
+        }
 
-        info!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+        info!("message: {}: {} @ {}", msg.author, msg.content, msg.timestamp);
     }
 }
 
@@ -206,7 +246,7 @@ async fn main() {
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
     // Generate a random UUID
-    info!("Bot version: {} (build: {})", VERSION, BUILD_ID);
+    info!("main: Bot version: {} (build: {})", VERSION, BUILD_ID);
 
     match setup::setup().await {
         Ok((db_pool, discord_token, channel_id)) => {
@@ -231,7 +271,7 @@ async fn main() {
                 .expect("Error creating client");
 
             if let Err(error) = client.start().await {
-                info!("Client error: {:?}", error);
+                info!("main: Client error: {:?}", error);
             }
         }
         Err(error) => {
