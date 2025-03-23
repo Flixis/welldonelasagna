@@ -43,6 +43,6 @@ pub fn create_race_embed(race: &Race) -> CreateEmbed {
             format!("**{}** days until race day!", days_until),
             false
         )
-        .footer(CreateEmbedFooter::new("Data provided by Ergast F1 API"))
+        .footer(CreateEmbedFooter::new("Data provided by api.jolpi.ca F1 API"))
         .timestamp(Timestamp::now())
 } 

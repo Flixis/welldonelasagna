@@ -165,7 +165,7 @@ impl EventHandler for Handler {
                 None => panic!("Start date not set"),
             };
 
-            info!("Using dates: {start_date} and {end_date}");
+            info!("main: Using dates: {start_date} and {end_date}");
 
             if let Err(e) = scraper::scrape_messages(
                 ctx,
@@ -178,7 +178,7 @@ impl EventHandler for Handler {
                 warn!("Error scraping messages: {:?}", e);
             }
         }
-        info!("{} is connected!", bot.user.name);
+        info!("ready: {} is connected!", bot.user.name);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: serenity::model::application::Interaction) {
@@ -231,7 +231,7 @@ impl EventHandler for Handler {
             warn!("Error handling roll quote: {:?}", e);
         }
 
-        info!("{}: {} @ {}", msg.author, msg.content, msg.timestamp);
+        info!("message: {}: {} @ {}", msg.author, msg.content, msg.timestamp);
     }
 }
 
@@ -246,7 +246,7 @@ async fn main() {
     let cli_args: cli::CliCommands = cli::CliCommands::parse();
 
     // Generate a random UUID
-    info!("Bot version: {} (build: {})", VERSION, BUILD_ID);
+    info!("main: Bot version: {} (build: {})", VERSION, BUILD_ID);
 
     match setup::setup().await {
         Ok((db_pool, discord_token, channel_id)) => {
@@ -271,7 +271,7 @@ async fn main() {
                 .expect("Error creating client");
 
             if let Err(error) = client.start().await {
-                info!("Client error: {:?}", error);
+                info!("main: Client error: {:?}", error);
             }
         }
         Err(error) => {

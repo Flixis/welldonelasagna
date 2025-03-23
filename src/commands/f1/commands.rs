@@ -38,13 +38,16 @@ pub async fn handle_commands(ctx: Context, command: &CommandInteraction) -> Resu
 }
 
 // Function to check for upcoming F1 races and announce them on Thursdays
-pub async fn check_upcoming_race(ctx: Context, channel_id: ChannelId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn check_upcoming_race(ctx: Context, _channel_id: ChannelId) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Only proceed if today is Thursday
     if !is_thursday() {
         return Ok(());
     }
     
-    info!("It's Thursday, checking for upcoming F1 races...");
+    info!("check_upcoming_race: It's Thursday, checking for upcoming F1 races...");
+    
+    // Use the specific channel ID
+    let announcement_channel = ChannelId::new(449885929629548544); // Formula 1 channel ID
     
     // Fetch F1 calendar
     match fetch_f1_calendar().await {
@@ -60,22 +63,22 @@ pub async fn check_upcoming_race(ctx: Context, channel_id: ChannelId) -> Result<
                     let embed = create_race_embed(&next_race);
                     
                     let message = CreateMessage::new()
-                        .content("**F1 RACE WEEKEND ALERT!**")
+                        .content("<@&formula1> **F1 RACE WEEKEND ALERT!**")
                         .add_embed(embed);
-                    if let Err(why) = channel_id.send_message(&ctx.http, message).await {
+                    if let Err(why) = announcement_channel.send_message(&ctx.http, message).await {
                         error!("Error sending F1 race announcement: {:?}", why);
                     } else {
-                        info!("F1 race announcement sent successfully!");
+                        info!("check_upcoming_race: F1 race announcement sent successfully!");
                     }
                 } else {
-                    info!("Next F1 race is in {} days, not announcing yet.", days_until);
+                    info!("check_upcoming_race: Next F1 race is in {} days, not announcing yet.", days_until);
                 }
             } else {
-                info!("No upcoming F1 races found.");
+                info!("check_upcoming_race: No upcoming F1 races found.");
             }
         }
         Err(e) => {
-            error!("Failed to fetch F1 calendar: {:?}", e);
+            error!("check_upcoming_race: Failed to fetch F1 calendar: {:?}", e);
         }
     }
     
@@ -88,19 +91,21 @@ async fn show_next_race(ctx: Context, command: &CommandInteraction) -> Result<()
     match fetch_f1_calendar().await {
         Ok(calendar) => {
             if let Some(next_race) = find_next_race(&calendar.mr_data.race_table.races) {
+                info!("show_next_race: Next F1 race: {}", next_race.race_name);
                 let embed = create_race_embed(&next_race);
                 
                 // Respond with the embed
                 let message = CreateInteractionResponseFollowup::new().add_embed(embed);
                 command.create_followup(&ctx.http, message).await?;
             } else {
+                info!("show_next_race: No upcoming F1 races found for the current season.");
                 let message = CreateInteractionResponseFollowup::new()
                     .content("No upcoming F1 races found for the current season.");
                 command.create_followup(&ctx.http, message).await?;
             }
         }
         Err(e) => {
-            error!("Failed to fetch F1 calendar: {:?}", e);
+            error!("show_next_race: Failed to fetch F1 calendar: {:?}", e);
             let message = CreateInteractionResponseFollowup::new()
                 .content("Failed to fetch F1 calendar. Please try again later.");
             command.create_followup(&ctx.http, message).await?;
@@ -119,6 +124,7 @@ async fn show_season_races(ctx: Context, command: &CommandInteraction) -> Result
             let races = &calendar.mr_data.race_table.races;
             
             if races.is_empty() {
+                info!("show_season_races: No F1 races found for the current season.");
                 let message = CreateInteractionResponseFollowup::new()
                     .content("No F1 races found for the current season.");
                 command.create_followup(&ctx.http, message).await?;
@@ -171,12 +177,13 @@ async fn show_season_races(ctx: Context, command: &CommandInteraction) -> Result
                 )
             });
             
+            info!("show_season_races: Sending embed to channel.");
             // Respond with the embed
             let message = CreateInteractionResponseFollowup::new().add_embed(embed);
             command.create_followup(&ctx.http, message).await?;
         }
         Err(e) => {
-            error!("Failed to fetch F1 calendar: {:?}", e);
+            error!("show_season_races: Failed to fetch F1 calendar: {:?}", e);
             let message = CreateInteractionResponseFollowup::new()
                 .content("Failed to fetch F1 calendar. Please try again later.");
             command.create_followup(&ctx.http, message).await?;

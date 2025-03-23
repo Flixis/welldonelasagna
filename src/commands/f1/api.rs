@@ -8,7 +8,7 @@ use crate::commands::f1::models::*;
 pub async fn fetch_f1_calendar() -> Result<F1Calendar, reqwest::Error> {
     let current_year = Utc::now().year().to_string();
     let url = format!("https://api.jolpi.ca/ergast/f1/{}/races.json", current_year);
-    info!("Fetching F1 calendar for year: {}", current_year);
+    info!("fetch_f1_calendar: Fetching F1 calendar for year: {}", current_year);
     
     let client = reqwest::Client::new();
     let response = client.get(&url).send().await?;

@@ -31,6 +31,6 @@ pub async fn show_version(ctx: Context, command: &CommandInteraction) -> Result<
         return Err(Box::new(e));
     }
     
-    info!("Version command executed successfully");
+    info!("show_version: Version command executed successfully");
     Ok(())
 }

@@ -394,14 +394,14 @@ pub async fn roll_quote(
     roll_amount: usize,
     db_pool: &MySqlPool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Connected to {:?}", channel_id);
+    info!("roll_quote: Connected to {:?}", channel_id);
 
     *counter += 1; // Increment counter
-    info!("counter at: {:?}", counter);
+    info!("roll_quote: counter at: {:?}", counter);
     if *counter >= roll_amount {
         *counter = 0; // Reset the counter
 
-        let rand = rand::thread_rng().gen_range(0..100);
+        let rand = rand::rng().random_range(0..100);
         info!("rand generated {:?}", rand);
 
         if rand < 1 {
@@ -453,11 +453,11 @@ pub async fn roll_quote(
                         )
                         .await
                     {
-                        error!("Failed to send random quote: {}", e);
+                        error!("roll_quote: Failed to send random quote: {}", e);
                     }
                 }
                 Err(e) => {
-                    error!("Failed to execute random quote query: {}", e);
+                    error!("roll_quote: Failed to execute random quote query: {}", e);
                 }
             }
         }
