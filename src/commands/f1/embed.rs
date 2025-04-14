@@ -1,7 +1,7 @@
 use chrono::{Local, NaiveDate};
 use serenity::{
-    all::{CreateEmbed},
-    builder::{CreateEmbedFooter},
+    all::CreateEmbed,
+    builder::CreateEmbedFooter,
     model::Timestamp,
 };
 use std::str::FromStr;

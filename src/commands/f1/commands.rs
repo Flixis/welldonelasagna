@@ -5,7 +5,7 @@ use serenity::{
         ChannelId, CommandInteraction, CreateInteractionResponseFollowup,
     },
     builder::{CreateEmbed, CreateEmbedFooter, CreateMessage},
-    model::Timestamp,
+    model::{Timestamp, mention::Mention, id::RoleId},
     prelude::*,
 };
 use std::str::FromStr;
@@ -62,8 +62,10 @@ pub async fn check_upcoming_race(ctx: Context, _channel_id: ChannelId) -> Result
                     // Race is this weekend, send announcement
                     let embed = create_race_embed(&next_race);
                     
+                    let role_id: u64 = 1348688949262024866;
+                    let role_mention = format!("{}", Mention::from(RoleId::new(role_id)));
                     let message = CreateMessage::new()
-                        .content("<@&formula1> **F1 RACE WEEKEND ALERT!**")
+                        .content(format!("{} **F1 RACE WEEKEND ALERT!**", role_mention))
                         .add_embed(embed);
                     if let Err(why) = announcement_channel.send_message(&ctx.http, message).await {
                         error!("Error sending F1 race announcement: {:?}", why);
@@ -191,4 +193,4 @@ async fn show_season_races(ctx: Context, command: &CommandInteraction) -> Result
     }
     
     Ok(())
-} 
+}
