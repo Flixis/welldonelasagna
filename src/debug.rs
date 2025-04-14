@@ -13,7 +13,7 @@ use serenity::{
 
 use crate::cli::{DebugCommands, F1Commands};
 use crate::commands::f1;
-use crate::setup;
+use crate::setup::BotConfig;
 
 // Define a simple error type that explicitly implements Send + Sync
 #[derive(Debug)]
@@ -134,35 +134,45 @@ fn print_help() {
 
 // Debug implementation of F1 related commands
 
-// Helper function to create Discord client
-async fn create_discord_client() -> Result<(Client, ChannelId), Box<dyn StdError + Send + Sync>> {
-    // Set up Discord connection using environment variables
-    match setup::setup().await {
-        Ok((_, discord_token, channel_id)) => {
-            info!("Setting up Discord client for debug mode");
+// Helper function to create Discord client with debug channel
+async fn create_debug_client() -> Result<(Client, ChannelId), Box<dyn StdError + Send + Sync>> {
+    // Load config
+    let config = BotConfig::new()
+        .map_err(|e| Box::new(SendSyncError::new(format!("Failed to load config: {}", e))) as Box<dyn StdError + Send + Sync>)?;
+        
+    info!("Setting up Discord client for debug commands");
+    
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
             
-            let intents = GatewayIntents::GUILD_MESSAGES
-                | GatewayIntents::DIRECT_MESSAGES
-                | GatewayIntents::MESSAGE_CONTENT;
-                
-            let client = Client::builder(&discord_token, intents)
-                .await
-                .map_err(|e| Box::new(SendSyncError::new(e.to_string())) as Box<dyn StdError + Send + Sync>)?;
-                
-            Ok((client, channel_id))
-        },
-        Err(e) => {
-            warn!("Failed to set up Discord client: {}", e);
-            Err(Box::new(SendSyncError::new(e.to_string())))
-        }
-    }
+    let client = Client::builder(&config.discord.token, intents)
+        .await
+        .map_err(|e| Box::new(SendSyncError::new(e.to_string())) as Box<dyn StdError + Send + Sync>)?;
+    
+    // Use debug channel if configured, otherwise use main channel
+    let channel_id = config.get_debug_channel_id()
+        .map_err(|e| Box::new(SendSyncError::new(format!("Failed to get debug channel: {}", e))) as Box<dyn StdError + Send + Sync>)?;
+    
+    Ok((client, channel_id))
+}
+
+// Get F1 role ID from config
+fn get_f1_role_id() -> Result<u64, Box<dyn StdError + Send + Sync>> {
+    let config = BotConfig::new()
+        .map_err(|e| Box::new(SendSyncError::new(format!("Failed to load config: {}", e))) as Box<dyn StdError + Send + Sync>)?;
+    
+    let role_id = config.f1.role_id.parse::<u64>()
+        .map_err(|e| Box::new(SendSyncError::new(format!("Failed to parse F1 role ID: {}", e))) as Box<dyn StdError + Send + Sync>)?;
+    
+    Ok(role_id)
 }
 
 async fn debug_f1_next_race() -> Result<(), Box<dyn StdError + Send + Sync>> {
     info!("Fetching next F1 race information (debug mode)");
     
-    // Create a Discord client for sending messages
-    let (client, channel_id) = create_discord_client().await?;
+    // Create a Discord client for sending messages to debug channel
+    let (client, channel_id) = create_debug_client().await?;
     let http = client.http.clone();
     
     match f1::api::fetch_f1_calendar().await {
@@ -213,8 +223,8 @@ async fn debug_f1_next_race() -> Result<(), Box<dyn StdError + Send + Sync>> {
 async fn debug_f1_season() -> Result<(), Box<dyn StdError + Send + Sync>> {
     info!("Fetching F1 season calendar (debug mode)");
     
-    // Create a Discord client for sending messages
-    let (client, channel_id) = create_discord_client().await?;
+    // Create a Discord client for sending messages to debug channel
+    let (client, channel_id) = create_debug_client().await?;
     let http = client.http.clone();
     
     match f1::api::fetch_f1_calendar().await {
@@ -326,8 +336,8 @@ async fn force_f1_race_check(http: &Http, channel_id: ChannelId) -> Result<(), B
                 // In debug mode, we'll always announce the race
                 let embed = f1::embed::create_race_embed(&next_race);
                 
-                // Create the role mention
-                let role_id: u64 = 1348688949262024866; // Use the actual F1 role ID
+                // Create the role mention with role ID from config
+                let role_id = get_f1_role_id()?;
                 let role_mention = format!("{}", Mention::from(RoleId::new(role_id)));
                 
                 // Create the message with embed
@@ -362,8 +372,8 @@ async fn force_f1_race_check(http: &Http, channel_id: ChannelId) -> Result<(), B
 async fn debug_f1_check_upcoming_race() -> Result<(), Box<dyn StdError + Send + Sync>> {
     info!("Triggering F1 race check on Discord (debug mode)");
     
-    // Create a Discord client for sending messages
-    let (client, channel_id) = create_discord_client().await?;
+    // Create a Discord client for sending messages to debug channel
+    let (client, channel_id) = create_debug_client().await?;
     let http = client.http.clone();
     
     // Print status in terminal

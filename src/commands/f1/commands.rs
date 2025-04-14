@@ -1,5 +1,5 @@
 use chrono::{Datelike, Local, NaiveDate, Utc};
-use log::{error, info};
+use log::{error, info, warn};
 use serenity::{
     all::{
         ChannelId, CommandInteraction, CreateInteractionResponseFollowup,
@@ -12,6 +12,7 @@ use std::str::FromStr;
 
 use crate::commands::f1::api::{fetch_f1_calendar, find_next_race, is_thursday};
 use crate::commands::f1::embed::create_race_embed;
+use crate::setup::BotConfig;
 
 // Command handler for the f1 command and its subcommands
 pub async fn handle_commands(ctx: Context, command: &CommandInteraction) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -46,9 +47,36 @@ pub async fn check_upcoming_race(ctx: Context, _channel_id: ChannelId) -> Result
     
     info!("check_upcoming_race: It's Thursday, checking for upcoming F1 races...");
     
-    // Use the specific channel ID
-    let announcement_channel = ChannelId::new(449885929629548544); // Formula 1 channel ID
+    // Load bot config
+    let config = match BotConfig::new() {
+        Ok(config) => config,
+        Err(err) => {
+            let error_msg = format!("Failed to load config: {}", err);
+            error!("{}", error_msg);
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, error_msg)));
+        }
+    };
     
+    // Get F1 channel ID
+    let f1_channel_id = match config.get_f1_channel_id() {
+        Ok(channel_id) => channel_id,
+        Err(err) => {
+            let error_msg = format!("Failed to get F1 channel ID: {}", err);
+            error!("{}", error_msg);
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, error_msg)));
+        }
+    };
+    
+    // Parse F1 role ID
+    let role_id = match config.f1.role_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(err) => {
+            let error_msg = format!("Failed to parse F1 role ID: {}", err);
+            error!("{}", error_msg);
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, error_msg)));
+        }
+    };
+        
     // Fetch F1 calendar
     match fetch_f1_calendar().await {
         Ok(calendar) => {
@@ -62,12 +90,12 @@ pub async fn check_upcoming_race(ctx: Context, _channel_id: ChannelId) -> Result
                     // Race is this weekend, send announcement
                     let embed = create_race_embed(&next_race);
                     
-                    let role_id: u64 = 1348688949262024866;
                     let role_mention = format!("{}", Mention::from(RoleId::new(role_id)));
                     let message = CreateMessage::new()
                         .content(format!("{} **F1 RACE WEEKEND ALERT!**", role_mention))
                         .add_embed(embed);
-                    if let Err(why) = announcement_channel.send_message(&ctx.http, message).await {
+                        
+                    if let Err(why) = f1_channel_id.send_message(&ctx.http, message).await {
                         error!("Error sending F1 race announcement: {:?}", why);
                     } else {
                         info!("check_upcoming_race: F1 race announcement sent successfully!");
@@ -80,7 +108,7 @@ pub async fn check_upcoming_race(ctx: Context, _channel_id: ChannelId) -> Result
             }
         }
         Err(e) => {
-            error!("check_upcoming_race: Failed to fetch F1 calendar: {:?}", e);
+            warn!("check_upcoming_race: Failed to fetch F1 calendar: {:?}", e);
         }
     }
     
