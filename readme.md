@@ -27,6 +27,16 @@ Key dependencies include:
 
 ## Building
 
+### Windows WSL
+
+```bash
+sudo apt-get install libssl-dev pkg-config
+sudo apt update
+sudo apt install build-essential
+```
+
+### Local Build
+
 ### Local Build
 
 ```bash
@@ -37,8 +47,6 @@ cargo build --release
 
 To build for X86_GNU Linux from Windows
 
-- Install `Cygwin`
-- Install `gcc` and `mingw64-x86_64-gcc` ^V12.04
 - Install rust `x86_64-pc-windows-gnu` toolchain
 - Run 'cargo build --target x86_64-pc-windows-gnu'
 
