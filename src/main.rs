@@ -16,6 +16,7 @@ use commands::{quote, scraper, version, f1};
 
 mod cli;
 mod commands;
+mod debug;
 mod logging_settings;
 mod setup;
 
@@ -248,6 +249,16 @@ async fn main() {
     // Generate a random UUID
     info!("main: Bot version: {} (build: {})", VERSION, BUILD_ID);
 
+    // Check if debug mode is enabled
+    if cli_args.debug {
+        info!("Starting in debug mode");
+        if let Err(e) = debug::run_debug_mode(cli_args.debug_command).await {
+            warn!("Debug mode error: {}", e);
+        }
+        return;
+    }
+
+    // Normal bot mode
     match setup::setup().await {
         Ok((db_pool, discord_token, channel_id)) => {
             // Create an instance of handler and fill its contents
