@@ -108,8 +108,8 @@ pub async fn handle_commands(ctx: &Context, command: &CommandInteraction) -> Res
                 for (user_id, tokens_remaining) in tokens {
                     // Try to fetch the username for each user ID
                     let username = match ctx.http.get_user(UserId::new(user_id as u64)).await {
-                        Ok(user) => format!("{} ({})", user.name, user_id),
-                        Err(_) => format!("Unknown User (ID: {})", user_id)
+                        Ok(user) => user.name.clone(),
+                        Err(_) => "Unknown User".to_string()
                     };
                     
                     embed = embed.field(
@@ -316,7 +316,7 @@ pub async fn handle_commands(ctx: &Context, command: &CommandInteraction) -> Res
                         // Limit to 25 entries to avoid embed size limits
                         let username = match ctx.http.get_user(UserId::new(*user_id as u64)).await {
                             Ok(user) => user.name,
-                            Err(_) => format!("Unknown User (ID: {})", user_id)
+                            Err(_) => "Unknown User".to_string()
                         };
                         
                         embed = embed.field(
@@ -383,20 +383,24 @@ pub async fn handle_commands(ctx: &Context, command: &CommandInteraction) -> Res
     // Function to show F1 Fantasy rules
     async fn show_rules(ctx: &Context, command: &CommandInteraction) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let rules = "# F1 Fantasy Rules\n\n\
-                     These are the rules for our F1 Fantasy competition:\n\n\
-                     1. Each participant gets 2 tokens per season\n\
-                     2. Tokens are used to record when you've swapped your fantasy team\n\
-                     3. You must use a token each time you change your team lineup\n\
-                     4. Once you've used all your tokens, you cannot change your team again\n\
-                     5. The participant with the most points at the end of the season wins\n\n\
-                     To record a team swap, use the `/f1 swap` command\n\
-                     Ask an admin if you have any questions!";
+                     __Team Swap Rules:__\n\
+                     • Each participant gets **2 team swap tokens** per season\n\
+                     • A token is consumed whenever you change your team composition after a race weekend has started\n\
+                     • You can modify your team freely before lock-out for each race weekend\n\
+                     • After lock-out, if your team differs from your previous race lineup, a swap token will be used\n\
+                     • Once you've used all your tokens, you cannot change your team again for the remainder of the season\n\
+                     • Chip usage is not limited by these rules (for now)\n\n\
+                     __How to Participate:__\n\
+                     • Use `/f1 swap` to record when you've changed your team\n\
+                     • Use `/f1 tokens` to check your remaining tokens\n\
+                     • The participant with the most points at the end of the season wins\n\n\
+                     __Need Help?__ Contact Q to get added to the competition or for any questions";
                      
         let embed = CreateEmbed::default()
-            .title("🏎️ F1 Fantasy Rules 🏎️")
+            .title("🏎️ F1 Fantasy League Rules")
             .description(rules)
             .color(0xFF1801)
-            .footer(CreateEmbedFooter::new("Ask an admin to be added to the F1 Fantasy competition"))
+            .footer(CreateEmbedFooter::new("Ask Q to be added to the F1 Fantasy competition"))
             .timestamp(Timestamp::now());
             
         let message = CreateInteractionResponseFollowup::new().add_embed(embed);
