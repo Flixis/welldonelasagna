@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO f1_token_usage (user_id, reason) VALUES (?, 'Team swap')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b6a1678f2a7076e53081fdbe8b724864df72322de890d792ed28b2de4991038c"
+}
