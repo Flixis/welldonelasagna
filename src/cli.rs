@@ -46,4 +46,9 @@ pub enum F1Commands {
     Season,
     /// Trigger the upcoming race check (simulates Thursday check)
     CheckUpcoming,
+    /// Add a user to the F1 fantasy token system
+    AddUserToken {
+        /// The Discord User ID to add
+        user_id: String,
+    },
 }

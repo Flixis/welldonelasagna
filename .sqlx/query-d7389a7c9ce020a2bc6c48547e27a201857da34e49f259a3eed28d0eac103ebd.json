@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE f1_fantasy_tokens\n            SET tokens_remaining = tokens_remaining - 1\n            WHERE user_id = ? AND tokens_remaining > 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d7389a7c9ce020a2bc6c48547e27a201857da34e49f259a3eed28d0eac103ebd"
+}

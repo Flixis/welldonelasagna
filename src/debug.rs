@@ -10,9 +10,13 @@ use serenity::{
     model::{prelude::*, id::RoleId, mention::Mention, Timestamp}, 
     prelude::*
 };
+use dotenv::dotenv; // For loading .env
+use sqlx::mysql::MySqlPoolOptions; // For creating the pool
+use std::env; // For reading DATABASE_URL
 
 use crate::cli::{DebugCommands, F1Commands};
 use crate::commands::f1;
+use crate::commands::f1::tokens::add_user_token; // Import add_user_token
 use crate::setup::BotConfig;
 
 // Define a simple error type that explicitly implements Send + Sync
@@ -77,10 +81,65 @@ async fn execute_f1_command(command: F1Commands) -> Result<(), Box<dyn StdError 
             info!("Executing debug F1 CheckUpcoming command");
             debug_f1_check_upcoming_race().await?;
         },
+        F1Commands::AddUserToken { user_id } => {
+            debug_f1_add_user_token(user_id).await?;
+        },
     }
     
     Ok(())
 }
+
+// Debug command to add a user to the F1 fantasy token system
+async fn debug_f1_add_user_token(user_id_str: String) -> Result<(), Box<dyn StdError + Send + Sync>> {
+    info!("Executing debug F1 AddUserToken command for user_id: {}", user_id_str);
+
+    // Parse user_id
+    let user_id = match user_id_str.parse::<i64>() {
+        Ok(id) => id,
+        Err(_) => {
+            let error_msg = format!("Invalid user_id format: '{}'. Must be a number.", user_id_str);
+            println!("{}", error_msg);
+            return Err(Box::new(SendSyncError::new(error_msg)));
+        }
+    };
+
+    // Load .env file
+    dotenv().ok(); // Ignore error if .env doesn't exist, maybe DATABASE_URL is set otherwise
+
+    // Get DATABASE_URL
+    let database_url = env::var("DATABASE_URL")
+        .map_err(|_| Box::new(SendSyncError::new("DATABASE_URL must be set in .env or environment")) as Box<dyn StdError + Send + Sync>)?;
+
+    // Create a database pool specifically for this debug command
+    println!("Connecting to database...");
+    let pool = MySqlPoolOptions::new()
+        .max_connections(2) // Small pool for debug command
+        .connect(&database_url)
+        .await
+        .map_err(|e| Box::new(SendSyncError::new(format!("Failed to connect to database: {}", e))) as Box<dyn StdError + Send + Sync>)?;
+    println!("Connected.");
+
+    // Call the add_user_token function
+    match add_user_token(&pool, user_id).await {
+        Ok(_) => {
+            let success_msg = format!("Successfully added/verified user {} in the F1 fantasy token system.", user_id);
+            info!("{}", success_msg);
+            println!("{}", success_msg);
+        }
+        Err(e) => {
+            let error_msg = format!("Failed to add user {} to token system: {}", user_id, e);
+            error!("{}", error_msg);
+            println!("{}", error_msg);
+            pool.close().await; // Close pool on error too
+            return Err(Box::new(SendSyncError::new(error_msg)));
+        }
+    }
+
+    pool.close().await; // Close the pool when done
+
+    Ok(())
+}
+
 
 async fn run_interactive_debug() -> Result<(), Box<dyn StdError + Send + Sync>> {
     info!("Interactive debug mode started. Type 'help' for available commands or 'exit' to quit.");
@@ -105,12 +164,20 @@ async fn run_interactive_debug() -> Result<(), Box<dyn StdError + Send + Sync>> 
                 "help" => print_help(),
                 "f1" => {
                     if parts.len() < 2 {
-                        println!("Missing F1 subcommand. Available: next, season, check_upcoming");
+                        println!("Missing F1 subcommand. Available: next, season, check_upcoming, add_user_token <user_id>");
                     } else {
                         match parts[1].to_lowercase().as_str() {
                             "next" => debug_f1_next_race().await?,
                             "season" => debug_f1_season().await?,
                             "check_upcoming" => debug_f1_check_upcoming_race().await?,
+                            "add_user_token" => {
+                                if parts.len() < 3 {
+                                    println!("Missing user_id argument for add_user_token.");
+                                } else {
+                                    // Pass the user_id string directly
+                                    debug_f1_add_user_token(parts[2].to_string()).await?;
+                                }
+                            },
                             _ => println!("Unknown F1 subcommand: {}", parts[1]),
                         }
                     }
@@ -130,6 +197,7 @@ fn print_help() {
     println!("  f1 next             - Show the next F1 race information");
     println!("  f1 season           - Show the F1 season calendar");
     println!("  f1 check_upcoming   - Trigger the upcoming race check (simulates Thursday check)");
+    println!("  f1 add_user_token <user_id> - Add a user to the F1 fantasy token system");
 }
 
 // Debug implementation of F1 related commands

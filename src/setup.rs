@@ -1,4 +1,5 @@
 use serenity::model::id::ChannelId;
+use sqlx::mysql::MySqlPoolOptions;
 use sqlx::MySqlPool;
 use std::error::Error;
 use std::str::FromStr;
@@ -6,6 +7,7 @@ use std::fs;
 use serde::Deserialize;
 use std::path::Path;
 use log::warn;
+use std::time::Duration;
 
 #[derive(Deserialize, Debug)]
 pub struct BotConfig {
@@ -136,7 +138,10 @@ pub async fn setup() -> Result<(MySqlPool, String, ChannelId), Box<dyn Error>> {
     let config = BotConfig::new()?;
 
     // Establish connection to the database
-    let db_pool = MySqlPool::connect(&config.database.url)
+    let db_pool = MySqlPoolOptions::new()
+        .max_connections(10) // Adjust the maximum number of connections as needed
+        .acquire_timeout(Duration::from_secs(10)) // Set a connection timeout
+        .connect(&config.database.url)
         .await
         .map_err(|e| format!("Failed to connect to the database: {}", e))?;
 

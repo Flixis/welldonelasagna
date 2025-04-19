@@ -9,7 +9,6 @@ use serenity::{
     prelude::*,
 };
 use sqlx::mysql::MySqlPool;
-use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
 
 use commands::{quote, scraper, version, f1};
@@ -112,9 +111,24 @@ impl Handler {
     }
 }
 
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+pub struct MySqlPoolKey;
+
+impl TypeMapKey for MySqlPoolKey {
+    type Value = Arc<Mutex<MySqlPool>>;
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, bot: Ready) {
+        // Store the database pool in the context
+        {
+            let mut data = ctx.data.write().await;
+            data.insert::<MySqlPoolKey>(Arc::new(Mutex::new(self.db_pool.clone())));
+        }
+
         // Register commands
         let commands = vec![
             CreateCommand::new("guessquote")
@@ -201,7 +215,7 @@ impl EventHandler for Handler {
                     }
                 }
                 "f1" => {
-                    if let Err(e) = f1::handle_commands(ctx, &command).await {
+                    if let Err(e) = f1::handle_commands(&ctx, &command).await {
                         warn!("Error handling F1 command: {:?}", e);
                     }
                 }
