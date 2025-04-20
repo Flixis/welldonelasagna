@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT tokens_remaining FROM f1_fantasy_tokens WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tokens_remaining",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ae3aff99af647901f2314fdc47629681ffac2358b984cd75bd26c8b310089b3b"
+}

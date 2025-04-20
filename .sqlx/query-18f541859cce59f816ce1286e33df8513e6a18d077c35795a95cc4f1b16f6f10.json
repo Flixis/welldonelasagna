@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO f1_fantasy_tokens (user_id) VALUES (?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "18f541859cce59f816ce1286e33df8513e6a18d077c35795a95cc4f1b16f6f10"
+}
