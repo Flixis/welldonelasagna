@@ -92,7 +92,7 @@ pub async fn get_all_token_usage(pool: &MySqlPool) -> Result<Vec<(i64, String, S
 /// If the user already exists, this function does nothing.
 pub async fn add_user_token(pool: &MySqlPool, user_id: i64) -> Result<(), Error> {
     sqlx::query!(
-        "INSERT INTO f1_fantasy_tokens (user_id) VALUES (?)",
+        "INSERT IGNORE INTO f1_fantasy_tokens (user_id) VALUES (?)",
         user_id
     )
     .execute(pool)
